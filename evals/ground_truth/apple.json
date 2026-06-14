@@ -1,0 +1,15 @@
+{
+  "company_name": "Apple",
+  "research": {
+    "founded_year": "1976",
+    "headquarters": "Cupertino",
+    "industry": "consumer electronics",
+    "website": "https://apple.com",
+    "key_leadership": ["Tim Cook"],
+    "key_products": ["iPhone", "Mac", "iPad", "Apple Watch"]
+  },
+  "financial": {
+    "revenue": "391",
+    "revenue_model": "hardware"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "company_name": "Circle",
+  "research": {
+    "founded_year": "2013",
+    "headquarters": "Boston",
+    "industry": "fintech",
+    "website": "https://circle.com",
+    "key_leadership": ["Jeremy Allaire"],
+    "key_products": ["USDC", "Circle Pay", "Web3 Services"]
+  },
+  "financial": {
+    "revenue": "billion",
+    "revenue_model": "interest"
+  }
+}

@@ -1,0 +1,101 @@
+{
+  "count": 6551,
+  "next": "https://www.courtlistener.com/api/rest/v4/search/?order_by=score+desc&page=2&page_size=5&q=%22Stripe%22&type=d",
+  "previous": null,
+  "results": [
+    {
+      "assignedTo": null,
+      "assigned_to_id": null,
+      "attorney": [],
+      "attorney_id": [],
+      "caseName": "Lena Brands LLC v. Stripe, Inc.",
+      "case_name_full": "",
+      "cause": "",
+      "chapter": null,
+      "court": "United States Bankruptcy Court, D. Delaware",
+      "court_citation_string": "Bankr. D. Del.",
+      "court_id": "deb",
+      "dateArgued": null,
+      "dateFiled": "2026-05-28",
+      "dateTerminated": null,
+      "docketNumber": "26-50368",
+      "docket_absolute_url": "/docket/73407918/lena-brands-llc-v-stripe-inc/",
+      "docket_id": 73407918,
+      "firm": [],
+      "firm_id": [],
+      "jurisdictionType": "",
+      "juryDemand": "",
+      "meta": {
+        "timestamp": "2026-05-29T12:01:17.282109Z",
+        "date_created": "2026-05-28T21:00:50.113211Z",
+        "score": {
+          "bm25": 223.09427
+        }
+      },
+      "pacer_case_id": "201481",
+      "party": [
+        "Lena Brands LLC",
+        "Stripe, Inc."
+      ],
+      "party_id": [],
+      "referredTo": null,
+      "referred_to_id": null,
+      "suitNature": "",
+      "trustee_str": null
+    },
+    {
+      "assignedTo": "Unassigned Judge",
+      "assigned_to_id": null,
+      "attorney": [
+        "Arthur G. Connolly , III",
+        "Alan Richard Silverstein"
+      ],
+      "attorney_id": [
+        10950809,
+        10950810
+      ],
+      "caseName": "Autoscribe Corporation v. Stripe, Inc.",
+      "case_name_full": "",
+      "cause": "35:271 Patent Infringement",
+      "chapter": null,
+      "court": "District Court, D. Delaware",
+      "court_citation_string": "D. Del.",
+      "court_id": "ded",
+      "dateArgued": null,
+      "dateFiled": "2025-12-12",
+      "dateTerminated": null,
+      "docketNumber": "1:25-cv-01498",
+      "docket_absolute_url": "/docket/72030076/autoscribe-corporation-v-stripe-inc/",
+      "docket_id": 72030076,
+      "firm": [
+        "Connolly Gallagher LLP"
+      ],
+      "firm_id": [
+        457077,
+        460941
+      ],
+      "jurisdictionType": "Federal Question",
+      "juryDemand": "Plaintiff",
+      "meta": {
+        "timestamp": "2025-12-13T02:26:17.988100Z",
+        "date_created": "2025-12-12T19:49:40.233825Z",
+        "score": {
+          "bm25": 215.6417
+        }
+      },
+      "pacer_case_id": "91464",
+      "party": [
+        "Autoscribe Corporation",
+        "Stripe, Inc."
+      ],
+      "party_id": [
+        16843350,
+        16843351
+      ],
+      "referredTo": null,
+      "referred_to_id": null,
+      "suitNature": "830 Patent",
+      "trustee_str": null
+    }
+  ]
+}

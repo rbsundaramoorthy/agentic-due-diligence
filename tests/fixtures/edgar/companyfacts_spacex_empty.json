@@ -1,0 +1,179 @@
+{
+  "entityName": "SPACE EXPLORATION TECHNOLOGIES CORP",
+  "cik": "0001181412",
+  "facts": {
+    "ffd": {
+      "NetFeeAmt": {
+        "label": "",
+        "description": "",
+        "units": {
+          "USD": [
+            {
+              "end": "2026-05-20",
+              "val": 138100,
+              "accn": "0001628280-26-036936",
+              "fy": null,
+              "fp": null,
+              "form": "S-1",
+              "filed": "2026-05-20"
+            },
+            {
+              "end": "2026-06-03",
+              "val": 11773024.98,
+              "accn": "0001628280-26-040364",
+              "fy": null,
+              "fp": null,
+              "form": "S-1/A",
+              "filed": "2026-06-03"
+            },
+            {
+              "end": "2026-06-12",
+              "val": 8837270.1,
+              "accn": "0001628280-26-042832",
+              "fy": null,
+              "fp": null,
+              "form": "S-8",
+              "filed": "2026-06-12",
+              "frame": "CY2026Q2I"
+            }
+          ]
+        }
+      },
+      "TtlFeeAmt": {
+        "label": "",
+        "description": "",
+        "units": {
+          "USD": [
+            {
+              "end": "2026-05-20",
+              "val": 138100,
+              "accn": "0001628280-26-036936",
+              "fy": null,
+              "fp": null,
+              "form": "S-1",
+              "filed": "2026-05-20"
+            },
+            {
+              "end": "2026-06-03",
+              "val": 11911124.98,
+              "accn": "0001628280-26-040364",
+              "fy": null,
+              "fp": null,
+              "form": "S-1/A",
+              "filed": "2026-06-03"
+            },
+            {
+              "end": "2026-06-12",
+              "val": 8837270.1,
+              "accn": "0001628280-26-042832",
+              "fy": null,
+              "fp": null,
+              "form": "S-8",
+              "filed": "2026-06-12",
+              "frame": "CY2026Q2I"
+            }
+          ]
+        }
+      },
+      "TtlOfferingAmt": {
+        "label": "",
+        "description": "",
+        "units": {
+          "USD": [
+            {
+              "end": "2026-05-20",
+              "val": 1000000000,
+              "accn": "0001628280-26-036936",
+              "fy": null,
+              "fp": null,
+              "form": "S-1",
+              "filed": "2026-05-20"
+            },
+            {
+              "end": "2026-06-03",
+              "val": 86249999880,
+              "accn": "0001628280-26-040364",
+              "fy": null,
+              "fp": null,
+              "form": "S-1/A",
+              "filed": "2026-06-03"
+            },
+            {
+              "end": "2026-06-12",
+              "val": 63991818188.8,
+              "accn": "0001628280-26-042832",
+              "fy": null,
+              "fp": null,
+              "form": "S-8",
+              "filed": "2026-06-12",
+              "frame": "CY2026Q2I"
+            }
+          ]
+        }
+      },
+      "TtlOffsetAmt": {
+        "label": "",
+        "description": "",
+        "units": {
+          "USD": [
+            {
+              "end": "2026-05-20",
+              "val": 0,
+              "accn": "0001628280-26-036936",
+              "fy": null,
+              "fp": null,
+              "form": "S-1",
+              "filed": "2026-05-20"
+            },
+            {
+              "end": "2026-06-03",
+              "val": 0,
+              "accn": "0001628280-26-040364",
+              "fy": null,
+              "fp": null,
+              "form": "S-1/A",
+              "filed": "2026-06-03"
+            },
+            {
+              "end": "2026-06-12",
+              "val": 0,
+              "accn": "0001628280-26-042832",
+              "fy": null,
+              "fp": null,
+              "form": "S-8",
+              "filed": "2026-06-12",
+              "frame": "CY2026Q2I"
+            }
+          ]
+        }
+      },
+      "TtlPrevslyPdAmt": {
+        "label": "",
+        "description": "",
+        "units": {
+          "USD": [
+            {
+              "end": "2026-05-20",
+              "val": 0,
+              "accn": "0001628280-26-036936",
+              "fy": null,
+              "fp": null,
+              "form": "S-1",
+              "filed": "2026-05-20"
+            },
+            {
+              "end": "2026-06-03",
+              "val": 138100,
+              "accn": "0001628280-26-040364",
+              "fy": null,
+              "fp": null,
+              "form": "S-1/A",
+              "filed": "2026-06-03",
+              "frame": "CY2026Q2I"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "api_version": "0.4",
+  "results": {
+    "companies": [
+      {
+        "company": {
+          "name": "EuroTech GmbH",
+          "company_number": "HRB123456",
+          "jurisdiction_code": "de",
+          "incorporation_date": "2015-04-01",
+          "current_status": "Active",
+          "opencorporates_url": "https://opencorporates.com/companies/de/HRB123456",
+          "registered_address_in_full": "Musterstrasse 1, 10115 Berlin, Germany"
+        }
+      }
+    ],
+    "page": 1,
+    "per_page": 20,
+    "total_count": 1,
+    "total_pages": 1
+  }
+}

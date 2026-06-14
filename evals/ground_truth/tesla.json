@@ -1,0 +1,15 @@
+{
+  "company_name": "Tesla",
+  "research": {
+    "founded_year": "2003",
+    "headquarters": "Austin",
+    "industry": "electric vehicles",
+    "website": "https://tesla.com",
+    "key_leadership": ["Elon Musk"],
+    "key_products": ["Model Y", "Model 3", "Cybertruck", "Powerwall"]
+  },
+  "financial": {
+    "revenue": "97",
+    "revenue_model": "vehicle"
+  }
+}

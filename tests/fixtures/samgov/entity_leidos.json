@@ -1,0 +1,42 @@
+{
+  "totalRecords": 1,
+  "entityData": [
+    {
+      "entityRegistration": {
+        "samRegistered": "Yes",
+        "ueiSAM": "LGVMRR4MJR42",
+        "cageCode": "1P784",
+        "legalBusinessName": "Leidos, Inc.",
+        "registrationStatus": "Active",
+        "registrationDate": "2006-01-01",
+        "lastUpdateDate": "2024-11-01",
+        "registrationExpirationDate": "2025-11-01",
+        "activationDate": "2006-01-01",
+        "purposeOfRegistrationCode": "Z2",
+        "purposeOfRegistrationDesc": "All Awards"
+      },
+      "coreData": {
+        "entityInformation": {
+          "entityTypeCode": "2L",
+          "entityTypeDesc": "Corporate Entity (Not Tax Exempt)"
+        },
+        "naicsCode": {
+          "naicsList": [
+            {
+              "naicsCode": "541512",
+              "naicsDescription": "Computer Systems Design Services",
+              "sbaSmallBusiness": "No",
+              "naicsException": null
+            },
+            {
+              "naicsCode": "541330",
+              "naicsDescription": "Engineering Services",
+              "sbaSmallBusiness": "No",
+              "naicsException": null
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

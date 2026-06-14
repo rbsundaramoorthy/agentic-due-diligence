@@ -1,0 +1,44 @@
+{
+  "api_version": "0.4",
+  "results": {
+    "companies": [
+      {
+        "company": {
+          "name": "Acme Corp",
+          "company_number": "12345678",
+          "jurisdiction_code": "us_de",
+          "incorporation_date": "2005-03-15",
+          "current_status": "Active",
+          "opencorporates_url": "https://opencorporates.com/companies/us_de/12345678",
+          "registered_address_in_full": "1209 Orange Street, Wilmington, DE 19801"
+        }
+      },
+      {
+        "company": {
+          "name": "Acme Corporation",
+          "company_number": "87654321",
+          "jurisdiction_code": "us_ny",
+          "incorporation_date": "1998-06-01",
+          "current_status": "Active",
+          "opencorporates_url": "https://opencorporates.com/companies/us_ny/87654321",
+          "registered_address_in_full": "123 Park Avenue, New York, NY 10001"
+        }
+      },
+      {
+        "company": {
+          "name": "Acme UK Ltd",
+          "company_number": "UK987654",
+          "jurisdiction_code": "gb",
+          "incorporation_date": "2010-01-01",
+          "current_status": "Active",
+          "opencorporates_url": "https://opencorporates.com/companies/gb/UK987654",
+          "registered_address_in_full": "1 London Street, London, EC1A 1BB"
+        }
+      }
+    ],
+    "page": 1,
+    "per_page": 20,
+    "total_count": 3,
+    "total_pages": 1
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "company_name": "TSMC",
+  "research": {
+    "founded_year": "1987",
+    "headquarters": "Hsinchu",
+    "industry": "semiconductor manufacturing",
+    "website": "https://tsmc.com",
+    "key_leadership": ["C.C. Wei"],
+    "key_products": ["3nm", "2nm", "N3", "N2"]
+  },
+  "financial": {
+    "revenue": "billion",
+    "revenue_model": "foundry"
+  }
+}

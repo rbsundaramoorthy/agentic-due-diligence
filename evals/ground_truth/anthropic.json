@@ -1,0 +1,16 @@
+{
+  "company_name": "Anthropic",
+  "research": {
+    "founded_year": "2021",
+    "headquarters": "San Francisco",
+    "industry": "artificial intelligence",
+    "website": "https://anthropic.com",
+    "key_leadership": ["Dario Amodei", "Daniela Amodei"],
+    "key_products": ["Claude"]
+  },
+  "financial": {
+    "revenue": "billion",
+    "revenue_model": "API usage fees",
+    "key_investors": ["Google", "Spark Capital", "Salesforce Ventures"]
+  }
+}

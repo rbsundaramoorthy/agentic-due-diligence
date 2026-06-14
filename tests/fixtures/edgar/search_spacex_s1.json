@@ -1,0 +1,31 @@
+{
+  "hits": {
+    "total": {"value": 41, "relation": "eq"},
+    "hits": [
+      {
+        "_index": "edgar_file",
+        "_id": "0001628280-26-040364:0001628280-26-040364.htm",
+        "_score": 14.22,
+        "_source": {
+          "ciks": ["0001181412"],
+          "display_names": ["SPACE EXPLORATION TECHNOLOGIES CORP  (SPCX)  (CIK 0001181412)"],
+          "adsh": "0001628280-26-040364",
+          "file_date": "2026-06-03",
+          "period_ending": null,
+          "form": "S-1/A",
+          "file_type": "S-1/A",
+          "file_description": "S-1/A",
+          "root_forms": ["S-1"],
+          "biz_locations": ["Starbase, TX"],
+          "inc_states": ["DE"],
+          "biz_states": ["TX"],
+          "sics": ["7370"],
+          "file_num": ["333-296070"],
+          "sequence": 1,
+          "items": [],
+          "xsl": null
+        }
+      }
+    ]
+  }
+}

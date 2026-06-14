@@ -1,0 +1,15 @@
+{
+  "company_name": "NVIDIA",
+  "research": {
+    "founded_year": "1993",
+    "headquarters": "Santa Clara",
+    "industry": "semiconductors",
+    "website": "https://nvidia.com",
+    "key_leadership": ["Jensen Huang"],
+    "key_products": ["H100", "CUDA", "Blackwell"]
+  },
+  "financial": {
+    "revenue": "130",
+    "revenue_model": "semiconductor"
+  }
+}

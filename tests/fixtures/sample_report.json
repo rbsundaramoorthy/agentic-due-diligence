@@ -1,0 +1,501 @@
+{
+  "schema_version": "1.0.6",
+  "report_id": "abc123def456",
+  "company_name": "Stripe",
+  "generated_at": "2026-05-17T00:00:00Z",
+  "run_metadata": {
+    "trace_id": "abc123def456",
+    "cost_usd": 0.45,
+    "duration_ms": 9000.0,
+    "total_llm_calls": 10,
+    "total_tool_calls": 5,
+    "total_input_tokens": 10000,
+    "total_output_tokens": 2000,
+    "agents": {
+      "research": {
+        "llm_calls": 3,
+        "tool_calls": 2,
+        "input_tokens": 3000,
+        "output_tokens": 600,
+        "cost_usd": 0.12,
+        "duration_ms": 3000.0,
+        "errors": 0
+      },
+      "financial": {
+        "llm_calls": 3,
+        "tool_calls": 2,
+        "input_tokens": 3000,
+        "output_tokens": 600,
+        "cost_usd": 0.12,
+        "duration_ms": 3000.0,
+        "errors": 0
+      },
+      "risk": {
+        "llm_calls": 2,
+        "tool_calls": 1,
+        "input_tokens": 2000,
+        "output_tokens": 400,
+        "cost_usd": 0.12,
+        "duration_ms": 2000.0,
+        "errors": 0
+      },
+      "social_media": {
+        "llm_calls": 2,
+        "tool_calls": 0,
+        "input_tokens": 2000,
+        "output_tokens": 400,
+        "cost_usd": 0.09,
+        "duration_ms": 1000.0,
+        "errors": 0
+      }
+    },
+    "tier_coverage": {},
+    "tier_attempts": {},
+    "edgar_lookup_status": null,
+    "edgar_cik": null,
+    "section_confidences": {
+      "research": 94.33,
+      "financial": 73.89,
+      "synthesis": 78.88
+    },
+    "overall_confidence": 73.89
+  },
+  "synthesis": {
+    "recommendation": {
+      "claim_id": "syn001abc123",
+      "field_name": "recommendation",
+      "value": "proceed_with_conditions",
+      "confidence": "medium",
+      "severity": null,
+      "sources": [],
+      "agent": "synthesis",
+      "reasoning": "Strong fundamentals offset by regulatory exposure",
+      "synthesized_from": [
+        "res001abc123"
+      ]
+    },
+    "recommendation_rationale": {
+      "claim_id": "syn002abc123",
+      "field_name": "recommendation_rationale",
+      "value": "Stripe is a dominant payment infrastructure provider with strong revenue growth, but faces increasing regulatory scrutiny and competitive pressure from bank-owned networks.",
+      "confidence": "medium",
+      "severity": null,
+      "sources": [],
+      "agent": "synthesis",
+      "reasoning": null,
+      "synthesized_from": [
+        "res001abc123"
+      ]
+    },
+    "executive_summary": {
+      "claim_id": "syn003abc123",
+      "field_name": "executive_summary",
+      "value": "Stripe is the leading independent payment infrastructure company, processing hundreds of billions in payments annually. Its developer-first approach and extensive API ecosystem have driven strong enterprise adoption.",
+      "confidence": "high",
+      "severity": null,
+      "sources": [],
+      "agent": "synthesis",
+      "reasoning": null,
+      "synthesized_from": [
+        "res001abc123"
+      ]
+    },
+    "key_strengths": [
+      {
+        "claim_id": "syn004abc123",
+        "field_name": "key_strengths[0]",
+        "value": "Developer-first API ecosystem with best-in-class documentation and SDKs",
+        "confidence": "high",
+        "severity": null,
+        "sources": [],
+        "agent": "synthesis",
+        "reasoning": null,
+        "synthesized_from": [
+          "res001abc123"
+        ]
+      },
+      {
+        "claim_id": "syn005abc123",
+        "field_name": "key_strengths[1]",
+        "value": "Revenue growth consistently above 25% YoY",
+        "confidence": "medium",
+        "severity": null,
+        "sources": [
+          {
+            "url": "https://techcrunch.com/2024/stripe-revenue",
+            "tier": "reputable_secondary",
+            "retrieved_at": null
+          }
+        ],
+        "agent": "synthesis",
+        "reasoning": null,
+        "synthesized_from": [
+          "res001abc123"
+        ]
+      }
+    ],
+    "key_concerns": [
+      {
+        "claim_id": "syn006abc123",
+        "field_name": "key_concerns[0]",
+        "value": "Increasing competition from Adyen, Braintree, and bank-owned payment networks",
+        "confidence": "high",
+        "severity": null,
+        "sources": [],
+        "agent": "synthesis",
+        "reasoning": null,
+        "synthesized_from": [
+          "res001abc123"
+        ]
+      }
+    ],
+    "red_flags": [],
+    "data_conflicts": [],
+    "follow_up_questions": [
+      {
+        "claim_id": "syn007abc123",
+        "field_name": "follow_up_questions[0]",
+        "value": "What is the timeline and scope of Stripe's IPO plans?",
+        "confidence": "low",
+        "severity": null,
+        "sources": [],
+        "agent": "synthesis",
+        "reasoning": "IPO timing affects valuation and liquidity",
+        "synthesized_from": [
+          "res001abc123"
+        ]
+      }
+    ],
+    "data_quality": {
+      "claim_id": "syn008abc123",
+      "field_name": "data_quality",
+      "value": "medium",
+      "confidence": "high",
+      "severity": null,
+      "sources": [],
+      "agent": "synthesis",
+      "reasoning": "Financial data is estimated; primary source filings not available for a private company",
+      "synthesized_from": [
+        "res001abc123"
+      ]
+    }
+  },
+  "research": {
+    "description": {
+      "claim_id": "res001abc123",
+      "field_name": "description",
+      "value": "Stripe is a technology company that builds economic infrastructure for the internet, offering payment processing and financial services.",
+      "confidence": "high",
+      "severity": null,
+      "sources": [
+        {
+          "url": "https://stripe.com/about",
+          "tier": "unknown",
+          "retrieved_at": null
+        }
+      ],
+      "agent": "research",
+      "reasoning": null,
+      "synthesized_from": []
+    },
+    "founded_year": {
+      "claim_id": "res002abc123",
+      "field_name": "founded_year",
+      "value": "2010",
+      "confidence": "high",
+      "severity": null,
+      "sources": [
+        {
+          "url": "https://www.crunchbase.com/organization/stripe",
+          "tier": "aggregator",
+          "retrieved_at": null
+        }
+      ],
+      "agent": "research",
+      "reasoning": null,
+      "synthesized_from": []
+    },
+    "headquarters": {
+      "claim_id": "res003abc123",
+      "field_name": "headquarters",
+      "value": "San Francisco, CA (and Dublin, Ireland)",
+      "confidence": "high",
+      "severity": null,
+      "sources": [],
+      "agent": "research",
+      "reasoning": null,
+      "synthesized_from": []
+    },
+    "employee_count": {
+      "claim_id": "res004abc123",
+      "field_name": "employee_count",
+      "value": "~7,000 (as of 2024)",
+      "confidence": "medium",
+      "severity": null,
+      "sources": [
+        {
+          "url": "https://www.linkedin.com/company/stripe",
+          "tier": "community",
+          "retrieved_at": null
+        }
+      ],
+      "agent": "research",
+      "reasoning": null,
+      "synthesized_from": []
+    },
+    "industry": {
+      "claim_id": "res005abc123",
+      "field_name": "industry",
+      "value": "Financial Technology / Payment Processing",
+      "confidence": "high",
+      "severity": null,
+      "sources": [],
+      "agent": "research",
+      "reasoning": null,
+      "synthesized_from": []
+    },
+    "website": {
+      "claim_id": "res006abc123",
+      "field_name": "website",
+      "value": "https://stripe.com",
+      "confidence": "high",
+      "severity": null,
+      "sources": [],
+      "agent": "research",
+      "reasoning": null,
+      "synthesized_from": []
+    },
+    "key_products": [
+      {
+        "claim_id": "res007abc123",
+        "field_name": "key_products[0]",
+        "value": "Stripe Payments \u2014 core payment processing API",
+        "confidence": "high",
+        "severity": null,
+        "sources": [],
+        "agent": "research",
+        "reasoning": null,
+        "synthesized_from": []
+      },
+      {
+        "claim_id": "res008abc123",
+        "field_name": "key_products[1]",
+        "value": "Stripe Atlas \u2014 business incorporation service",
+        "confidence": "high",
+        "severity": null,
+        "sources": [],
+        "agent": "research",
+        "reasoning": null,
+        "synthesized_from": []
+      }
+    ],
+    "key_leadership": [
+      {
+        "claim_id": "res009abc123",
+        "field_name": "key_leadership[0]",
+        "value": "Patrick Collison \u2014 Co-founder & CEO",
+        "confidence": "high",
+        "severity": null,
+        "sources": [],
+        "agent": "research",
+        "reasoning": null,
+        "synthesized_from": []
+      },
+      {
+        "claim_id": "res010abc123",
+        "field_name": "key_leadership[1]",
+        "value": "John Collison \u2014 Co-founder & President",
+        "confidence": "high",
+        "severity": null,
+        "sources": [],
+        "agent": "research",
+        "reasoning": null,
+        "synthesized_from": []
+      }
+    ],
+    "technology_stack": [
+      {
+        "claim_id": "res011abc123",
+        "field_name": "technology_stack[0]",
+        "value": "Ruby, Go, JavaScript (primary languages)",
+        "confidence": "medium",
+        "severity": null,
+        "sources": [],
+        "agent": "research",
+        "reasoning": null,
+        "synthesized_from": []
+      }
+    ],
+    "recent_developments": [
+      {
+        "claim_id": "res012abc123",
+        "field_name": "recent_developments[0]",
+        "value": "Launched Stripe Financial Connections for bank account data access",
+        "confidence": "high",
+        "severity": null,
+        "sources": [
+          {
+            "url": "https://techcrunch.com/stripe-financial-connections",
+            "tier": "reputable_secondary",
+            "retrieved_at": null
+          }
+        ],
+        "agent": "research",
+        "reasoning": null,
+        "synthesized_from": []
+      }
+    ],
+    "patent_count": null,
+    "notable_patents": []
+  },
+  "financial": {
+    "revenue": {
+      "claim_id": "fin001abc123",
+      "field_name": "revenue",
+      "value": "~$15B estimated (2024)",
+      "confidence": "low",
+      "severity": null,
+      "sources": [
+        {
+          "url": "https://www.reuters.com/stripe-revenue-2024",
+          "tier": "reputable_secondary",
+          "retrieved_at": null
+        }
+      ],
+      "agent": "financial",
+      "reasoning": "Private company; figure is analyst estimate",
+      "synthesized_from": []
+    },
+    "revenue_growth": {
+      "claim_id": "fin002abc123",
+      "field_name": "revenue_growth",
+      "value": "~25-30% YoY",
+      "confidence": "low",
+      "severity": null,
+      "sources": [],
+      "agent": "financial",
+      "reasoning": "Estimated from industry analyst reports",
+      "synthesized_from": []
+    },
+    "profitability": {
+      "claim_id": "fin003abc123",
+      "field_name": "profitability",
+      "value": "Profitable on adjusted EBITDA basis since 2023",
+      "confidence": "medium",
+      "severity": null,
+      "sources": [
+        {
+          "url": "https://www.reuters.com/stripe-profitable-2023",
+          "tier": "reputable_secondary",
+          "retrieved_at": null
+        }
+      ],
+      "agent": "financial",
+      "reasoning": null,
+      "synthesized_from": []
+    },
+    "total_funding": {
+      "claim_id": "fin004abc123",
+      "field_name": "total_funding",
+      "value": "$8.7B",
+      "confidence": "high",
+      "severity": null,
+      "sources": [
+        {
+          "url": "https://www.crunchbase.com/organization/stripe",
+          "tier": "aggregator",
+          "retrieved_at": null
+        }
+      ],
+      "agent": "financial",
+      "reasoning": null,
+      "synthesized_from": []
+    },
+    "last_funding_round": {
+      "claim_id": "fin005abc123",
+      "field_name": "last_funding_round",
+      "value": "Series I \u2014 $6.5B at $50B valuation (March 2023)",
+      "confidence": "high",
+      "severity": null,
+      "sources": [
+        {
+          "url": "https://techcrunch.com/stripe-series-i",
+          "tier": "reputable_secondary",
+          "retrieved_at": null
+        }
+      ],
+      "agent": "financial",
+      "reasoning": null,
+      "synthesized_from": []
+    },
+    "valuation": {
+      "claim_id": "fin006abc123",
+      "field_name": "valuation",
+      "value": "$65B (2024 secondary market estimate)",
+      "confidence": "low",
+      "severity": null,
+      "sources": [],
+      "agent": "financial",
+      "reasoning": "Secondary market transactions suggest higher valuation than 2023 primary round",
+      "synthesized_from": []
+    },
+    "revenue_model": {
+      "claim_id": "fin007abc123",
+      "field_name": "revenue_model",
+      "value": "Transaction fee (2.9% + 30\u00a2 per card charge) plus SaaS fees for enterprise and addon products",
+      "confidence": "high",
+      "severity": null,
+      "sources": [
+        {
+          "url": "https://stripe.com/pricing",
+          "tier": "unknown",
+          "retrieved_at": null
+        }
+      ],
+      "agent": "financial",
+      "reasoning": null,
+      "synthesized_from": []
+    },
+    "key_investors": [
+      {
+        "claim_id": "fin008abc123",
+        "field_name": "key_investors[0]",
+        "value": "Sequoia Capital",
+        "confidence": "high",
+        "severity": null,
+        "sources": [],
+        "agent": "financial",
+        "reasoning": null,
+        "synthesized_from": []
+      },
+      {
+        "claim_id": "fin009abc123",
+        "field_name": "key_investors[1]",
+        "value": "Andreessen Horowitz",
+        "confidence": "high",
+        "severity": null,
+        "sources": [],
+        "agent": "financial",
+        "reasoning": null,
+        "synthesized_from": []
+      }
+    ],
+    "key_customers": [],
+    "financial_risks": [],
+    "recent_financial_events": []
+  },
+  "risk": null,
+  "social_media": null,
+  "gaps": [
+    {
+      "field": "risk",
+      "agent": "risk",
+      "reason": "Risk agent not run in this fixture"
+    },
+    {
+      "field": "social_media",
+      "agent": "social_media",
+      "reason": "Social media agent not run in this fixture"
+    }
+  ]
+}

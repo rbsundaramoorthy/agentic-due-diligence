@@ -1,0 +1,24 @@
+{
+  "patents": [
+    {
+      "patent_id": "US11870547",
+      "patent_title": "Methods and apparatus for wireless communication using beamforming",
+      "patent_date": "2024-01-09",
+      "assignees": [{"assignee_organization": "QUALCOMM Incorporated"}]
+    },
+    {
+      "patent_id": "US11856531",
+      "patent_title": "Channel state information feedback for multi-user MIMO",
+      "patent_date": "2023-12-26",
+      "assignees": [{"assignee_organization": "QUALCOMM Incorporated"}]
+    },
+    {
+      "patent_id": "US11844103",
+      "patent_title": "Interference management in 5G NR systems",
+      "patent_date": "2023-12-12",
+      "assignees": [{"assignee_organization": "QUALCOMM Incorporated"}]
+    }
+  ],
+  "total_patent_count": 54821,
+  "count": 3
+}

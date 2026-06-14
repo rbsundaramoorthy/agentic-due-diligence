@@ -1,0 +1,15 @@
+{
+  "company_name": "Broadcom",
+  "research": {
+    "founded_year": "1991",
+    "headquarters": "San Jose",
+    "industry": "semiconductors",
+    "website": "https://broadcom.com",
+    "key_leadership": ["Hock Tan"],
+    "key_products": ["VMware", "networking semiconductors", "ASIC chips"]
+  },
+  "financial": {
+    "revenue": "51",
+    "revenue_model": "semiconductor"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "company_name": "Alphabet",
+  "research": {
+    "founded_year": "1998",
+    "headquarters": "Mountain View",
+    "industry": "technology",
+    "website": "https://abc.xyz",
+    "key_leadership": ["Sundar Pichai"],
+    "key_products": ["Google Search", "YouTube", "Google Cloud"]
+  },
+  "financial": {
+    "revenue": "350",
+    "revenue_model": "advertising"
+  }
+}

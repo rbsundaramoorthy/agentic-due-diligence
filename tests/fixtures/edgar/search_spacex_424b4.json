@@ -1,0 +1,245 @@
+{
+  "took": 905,
+  "timed_out": false,
+  "_shards": {
+    "total": 50,
+    "successful": 50,
+    "skipped": 0,
+    "failed": 0
+  },
+  "hits": {
+    "total": {
+      "value": 12,
+      "relation": "eq"
+    },
+    "max_score": 9.381065,
+    "hits": [
+      {
+        "_index": "edgar_file",
+        "_id": "0001628280-26-042639:spaceexplorationtechnologi.htm",
+        "_score": 9.381065,
+        "_source": {
+          "ciks": [
+            "0001181412"
+          ],
+          "period_ending": null,
+          "file_num": [
+            "333-296070"
+          ],
+          "display_names": [
+            "SPACE EXPLORATION TECHNOLOGIES CORP  (SPCX)  (CIK 0001181412)"
+          ],
+          "xsl": null,
+          "sequence": 1,
+          "root_forms": [
+            "424B4"
+          ],
+          "file_date": "2026-06-12",
+          "biz_states": [
+            "TX"
+          ],
+          "sics": [
+            "7370"
+          ],
+          "form": "424B4",
+          "adsh": "0001628280-26-042639",
+          "film_num": [
+            "261084828"
+          ],
+          "biz_locations": [
+            "Starbase, TX"
+          ],
+          "file_type": "424B4",
+          "file_description": "424B4",
+          "inc_states": [
+            "TX"
+          ],
+          "items": []
+        }
+      }
+    ]
+  },
+  "aggregations": {
+    "entity_filter": {
+      "doc_count_error_upper_bound": 0,
+      "sum_other_doc_count": 0,
+      "buckets": [
+        {
+          "key": "TESLA MOTORS INC  (TSLA)  (CIK 0001318605)",
+          "doc_count": 2
+        },
+        {
+          "key": "ThredUp Inc.  (TDUP)  (CIK 0001484778)",
+          "doc_count": 2
+        },
+        {
+          "key": "Elmet Group Co.  (ELMT)  (CIK 0002101698)",
+          "doc_count": 1
+        },
+        {
+          "key": "FutureCorp Space Acquisition 1  (FTRA)  (CIK 0002131853)",
+          "doc_count": 1
+        },
+        {
+          "key": "Ivanhoe Capital Acquisition Corp.  (SES, SES-WT)  (CIK 0001819142)",
+          "doc_count": 1
+        },
+        {
+          "key": "Mynaric AG  (MYNA, MOYFF)  (CIK 0001850453)",
+          "doc_count": 1
+        },
+        {
+          "key": "NEOPHOTONICS CORP  (CIK 0001227025)",
+          "doc_count": 1
+        },
+        {
+          "key": "SOLARCITY CORP  (CIK 0001408356)",
+          "doc_count": 1
+        },
+        {
+          "key": "SPACE EXPLORATION TECHNOLOGIES CORP  (SPCX)  (CIK 0001181412)",
+          "doc_count": 1
+        },
+        {
+          "key": "Velo3D, Inc.  (VLDX, VLDXD, VLDXW)  (CIK 0001825079)",
+          "doc_count": 1
+        }
+      ]
+    },
+    "sic_filter": {
+      "doc_count_error_upper_bound": 0,
+      "sum_other_doc_count": 0,
+      "buckets": [
+        {
+          "key": "3711",
+          "doc_count": 2
+        },
+        {
+          "key": "5961",
+          "doc_count": 2
+        },
+        {
+          "key": "6770",
+          "doc_count": 2
+        },
+        {
+          "key": "1700",
+          "doc_count": 1
+        },
+        {
+          "key": "3490",
+          "doc_count": 1
+        },
+        {
+          "key": "3559",
+          "doc_count": 1
+        },
+        {
+          "key": "3674",
+          "doc_count": 1
+        },
+        {
+          "key": "4899",
+          "doc_count": 1
+        },
+        {
+          "key": "7370",
+          "doc_count": 1
+        }
+      ]
+    },
+    "biz_states_filter": {
+      "doc_count_error_upper_bound": 0,
+      "sum_other_doc_count": 0,
+      "buckets": [
+        {
+          "key": "CA",
+          "doc_count": 8
+        },
+        {
+          "key": "2M",
+          "doc_count": 1
+        },
+        {
+          "key": "ME",
+          "doc_count": 1
+        },
+        {
+          "key": "TX",
+          "doc_count": 1
+        },
+        {
+          "key": "U0",
+          "doc_count": 1
+        }
+      ]
+    },
+    "form_filter": {
+      "doc_count_error_upper_bound": 0,
+      "sum_other_doc_count": 0,
+      "buckets": [
+        {
+          "key": "424B4",
+          "doc_count": 12
+        }
+      ]
+    }
+  },
+  "query": {
+    "_source": {
+      "exclude": [
+        "doc_text"
+      ]
+    },
+    "query": {
+      "bool": {
+        "must": [
+          {
+            "match_phrase": {
+              "doc_text": "Space Exploration Technologies"
+            }
+          }
+        ],
+        "must_not": [],
+        "should": [],
+        "filter": [
+          {
+            "terms": {
+              "root_forms": [
+                "424B4"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "from": 0,
+    "size": 100,
+    "aggregations": {
+      "form_filter": {
+        "terms": {
+          "field": "root_forms",
+          "size": 30
+        }
+      },
+      "entity_filter": {
+        "terms": {
+          "field": "display_names.raw",
+          "size": 30
+        }
+      },
+      "sic_filter": {
+        "terms": {
+          "field": "sics",
+          "size": 30
+        }
+      },
+      "biz_states_filter": {
+        "terms": {
+          "field": "biz_states",
+          "size": 30
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,190 @@
+{
+  "entityName": "Apple Inc.",
+  "facts": {
+    "us-gaap": {
+      "Revenues": {
+        "label": "Revenues",
+        "description": "Amount of revenue recognized from goods sold, services rendered, insurance premiums, or other activities that constitute an earning process. Includes, but is not limited to, investment and interest income before deduction of interest expense when recognized as a component of revenue, and sales and trading gain (loss).",
+        "units": {
+          "USD": [
+            {
+              "start": "2017-10-01",
+              "end": "2018-09-29",
+              "val": 265595000000,
+              "accn": "0000320193-18-000145",
+              "fy": 2018,
+              "fp": "FY",
+              "form": "10-K",
+              "filed": "2018-11-05",
+              "frame": "CY2018"
+            },
+            {
+              "start": "2018-07-01",
+              "end": "2018-09-29",
+              "val": 62900000000,
+              "accn": "0000320193-18-000145",
+              "fy": 2018,
+              "fp": "FY",
+              "form": "10-K",
+              "filed": "2018-11-05",
+              "frame": "CY2018Q3"
+            },
+            {
+              "start": "2018-04-01",
+              "end": "2018-06-30",
+              "val": 53265000000,
+              "accn": "0000320193-18-000145",
+              "fy": 2018,
+              "fp": "FY",
+              "form": "10-K",
+              "filed": "2018-11-05",
+              "frame": "CY2018Q2"
+            }
+          ]
+        }
+      },
+      "RevenueFromContractWithCustomerExcludingAssessedTax": {
+        "label": "Revenue from Contract with Customer, Excluding Assessed Tax",
+        "description": "Amount, excluding tax collected from customer, of revenue from satisfaction of performance obligation by transferring promised good or service to customer. Tax collected from customer is tax assessed by governmental authority that is both imposed on and concurrent with specific revenue-producing transaction, including, but not limited to, sales, use, value added and excise.",
+        "units": {
+          "USD": [
+            {
+              "start": "2024-09-29",
+              "end": "2025-09-27",
+              "val": 416161000000,
+              "accn": "0000320193-25-000079",
+              "fy": 2025,
+              "fp": "FY",
+              "form": "10-K",
+              "filed": "2025-10-31",
+              "frame": "CY2025"
+            },
+            {
+              "start": "2023-10-01",
+              "end": "2024-09-28",
+              "val": 391035000000,
+              "accn": "0000320193-24-000123",
+              "fy": 2024,
+              "fp": "FY",
+              "form": "10-K",
+              "filed": "2024-11-01"
+            },
+            {
+              "start": "2023-10-01",
+              "end": "2024-09-28",
+              "val": 391035000000,
+              "accn": "0000320193-25-000079",
+              "fy": 2025,
+              "fp": "FY",
+              "form": "10-K",
+              "filed": "2025-10-31",
+              "frame": "CY2024"
+            },
+            {
+              "start": "2022-09-25",
+              "end": "2023-09-30",
+              "val": 383285000000,
+              "accn": "0000320193-23-000106",
+              "fy": 2023,
+              "fp": "FY",
+              "form": "10-K",
+              "filed": "2023-11-03"
+            },
+            {
+              "start": "2022-09-25",
+              "end": "2023-09-30",
+              "val": 383285000000,
+              "accn": "0000320193-24-000123",
+              "fy": 2024,
+              "fp": "FY",
+              "form": "10-K",
+              "filed": "2024-11-01"
+            },
+            {
+              "start": "2022-09-25",
+              "end": "2023-09-30",
+              "val": 383285000000,
+              "accn": "0000320193-25-000079",
+              "fy": 2025,
+              "fp": "FY",
+              "form": "10-K",
+              "filed": "2025-10-31",
+              "frame": "CY2023"
+            }
+          ]
+        }
+      },
+      "NetIncomeLoss": {
+        "label": "Net Income (Loss) Attributable to Parent",
+        "description": "The portion of profit or loss for the period, net of income taxes, which is attributable to the parent.",
+        "units": {
+          "USD": [
+            {
+              "start": "2024-09-29",
+              "end": "2025-09-27",
+              "val": 112010000000,
+              "accn": "0000320193-25-000079",
+              "fy": 2025,
+              "fp": "FY",
+              "form": "10-K",
+              "filed": "2025-10-31",
+              "frame": "CY2025"
+            },
+            {
+              "start": "2023-10-01",
+              "end": "2024-09-28",
+              "val": 93736000000,
+              "accn": "0000320193-24-000123",
+              "fy": 2024,
+              "fp": "FY",
+              "form": "10-K",
+              "filed": "2024-11-01"
+            },
+            {
+              "start": "2023-10-01",
+              "end": "2024-09-28",
+              "val": 93736000000,
+              "accn": "0000320193-25-000079",
+              "fy": 2025,
+              "fp": "FY",
+              "form": "10-K",
+              "filed": "2025-10-31",
+              "frame": "CY2024"
+            },
+            {
+              "start": "2022-09-25",
+              "end": "2023-09-30",
+              "val": 96995000000,
+              "accn": "0000320193-23-000106",
+              "fy": 2023,
+              "fp": "FY",
+              "form": "10-K",
+              "filed": "2023-11-03"
+            },
+            {
+              "start": "2022-09-25",
+              "end": "2023-09-30",
+              "val": 96995000000,
+              "accn": "0000320193-24-000123",
+              "fy": 2024,
+              "fp": "FY",
+              "form": "10-K",
+              "filed": "2024-11-01"
+            },
+            {
+              "start": "2022-09-25",
+              "end": "2023-09-30",
+              "val": 96995000000,
+              "accn": "0000320193-25-000079",
+              "fy": 2025,
+              "fp": "FY",
+              "form": "10-K",
+              "filed": "2025-10-31",
+              "frame": "CY2023"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

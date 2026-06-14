@@ -1,0 +1,15 @@
+{
+  "company_name": "NextEra Energy",
+  "research": {
+    "founded_year": "1984",
+    "headquarters": "Juno Beach",
+    "industry": "utilities",
+    "website": "https://nexteraenergy.com",
+    "key_leadership": ["John Ketchum"],
+    "key_products": ["Florida Power & Light", "wind farms", "solar farms"]
+  },
+  "financial": {
+    "revenue": "24",
+    "revenue_model": "electricity"
+  }
+}

@@ -1,0 +1,941 @@
+{
+  "$defs": {
+    "AgentRunMetadata": {
+      "description": "Per-agent metrics for one pipeline run.",
+      "properties": {
+        "llm_calls": {
+          "default": 0,
+          "title": "Llm Calls",
+          "type": "integer"
+        },
+        "tool_calls": {
+          "default": 0,
+          "title": "Tool Calls",
+          "type": "integer"
+        },
+        "input_tokens": {
+          "default": 0,
+          "title": "Input Tokens",
+          "type": "integer"
+        },
+        "output_tokens": {
+          "default": 0,
+          "title": "Output Tokens",
+          "type": "integer"
+        },
+        "cost_usd": {
+          "default": 0.0,
+          "title": "Cost Usd",
+          "type": "number"
+        },
+        "duration_ms": {
+          "default": 0.0,
+          "title": "Duration Ms",
+          "type": "number"
+        },
+        "errors": {
+          "default": 0,
+          "title": "Errors",
+          "type": "integer"
+        }
+      },
+      "title": "AgentRunMetadata",
+      "type": "object"
+    },
+    "Claim": {
+      "description": "A single extracted fact in the canonical report layer.\n\nExtends DataPoint with: a stable claim_id, the field name it maps to,\nthe agent that produced it, and SourceRef objects (typed, tier-annotated)\ninstead of bare URL strings.\n\nsynthesized_from: non-empty only on synthesis-agent claims. Each entry is\na claim_id of an upstream Claim (research/financial/risk/social_media/edgar)\nthat this synthesis claim draws from, forming an auditable provenance chain.\n\nderived: True when the value contains a number or result that the agent\ncomputed (percentage, growth rate, margin, ratio, sum, average). False when\nthe value is taken verbatim from a source. A source stating \"85% growth\" is\nnot derived; the agent computing 85% from two revenue figures is.\n\nderived_from: non-empty only when derived=True. Each entry is a claim_id of\nan atomic input claim in the same document whose value was used in the\ncomputation. Enables calibration to distinguish source-grounded claims (wrong\nsource) from derived claims (wrong arithmetic) \u2014 different failure modes.\n\nInvariant: derived=True \u2194 derived_from is non-empty (enforced by validator).\n\nValidation rule for synthesis claims:\n- Specific synthesis fields (key_strengths, key_concerns, red_flags,\n  data_conflicts, follow_up_questions): synthesized_from MUST be non-empty.\n- General synthesis fields (executive_summary, recommendation,\n  recommendation_rationale, data_quality): synthesized_from OR reasoning\n  must be non-empty. Both is preferred; neither is a hard error only at\n  the Claim level \u2014 assembly-level validation (_validate_synthesized_from)\n  catches dangling references.",
+      "properties": {
+        "claim_id": {
+          "title": "Claim Id",
+          "type": "string"
+        },
+        "field_name": {
+          "title": "Field Name",
+          "type": "string"
+        },
+        "value": {
+          "title": "Value",
+          "type": "string"
+        },
+        "confidence": {
+          "$ref": "#/$defs/ConfidenceLevel"
+        },
+        "severity": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SeverityLevel"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "sources": {
+          "items": {
+            "$ref": "#/$defs/SourceRef"
+          },
+          "title": "Sources",
+          "type": "array"
+        },
+        "agent": {
+          "title": "Agent",
+          "type": "string"
+        },
+        "reasoning": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reasoning"
+        },
+        "synthesized_from": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Synthesized From",
+          "type": "array"
+        },
+        "derived": {
+          "default": false,
+          "title": "Derived",
+          "type": "boolean"
+        },
+        "derived_from": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Derived From",
+          "type": "array"
+        },
+        "unverified_financial": {
+          "default": false,
+          "description": "Set by Cap 2 in the assembler. True when this is a material financial claim (revenue, revenue_growth, profitability, valuation, total_funding) whose sources are entirely community/aggregator/unknown with no reputable or primary evidence. Confidence is also capped to LOW when this flag is set.",
+          "title": "Unverified Financial",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "claim_id",
+        "field_name",
+        "value",
+        "confidence",
+        "agent"
+      ],
+      "title": "Claim",
+      "type": "object"
+    },
+    "ConfidenceLevel": {
+      "description": "How much we trust this data point.\n\nIn entity resolution systems, every resolved field carried a confidence score.\nLLM-extracted data needs the same discipline \u2014 maybe more so, because\nLLMs can hallucinate with high confidence.",
+      "enum": [
+        "high",
+        "medium",
+        "low",
+        "unknown"
+      ],
+      "title": "ConfidenceLevel",
+      "type": "string"
+    },
+    "GapRecord": {
+      "description": "A field for which no reliable data was found.",
+      "properties": {
+        "field": {
+          "title": "Field",
+          "type": "string"
+        },
+        "agent": {
+          "title": "Agent",
+          "type": "string"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "field",
+        "agent",
+        "reason"
+      ],
+      "title": "GapRecord",
+      "type": "object"
+    },
+    "ReportFinancial": {
+      "description": "Financial section of the canonical report.",
+      "properties": {
+        "revenue": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Claim"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "revenue_growth": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Claim"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "profitability": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Claim"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "total_funding": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Claim"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "last_funding_round": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Claim"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "valuation": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Claim"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "revenue_model": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Claim"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "key_investors": {
+          "items": {
+            "$ref": "#/$defs/Claim"
+          },
+          "title": "Key Investors",
+          "type": "array"
+        },
+        "key_customers": {
+          "items": {
+            "$ref": "#/$defs/Claim"
+          },
+          "title": "Key Customers",
+          "type": "array"
+        },
+        "financial_risks": {
+          "items": {
+            "$ref": "#/$defs/Claim"
+          },
+          "title": "Financial Risks",
+          "type": "array"
+        },
+        "recent_financial_events": {
+          "items": {
+            "$ref": "#/$defs/Claim"
+          },
+          "title": "Recent Financial Events",
+          "type": "array"
+        }
+      },
+      "title": "ReportFinancial",
+      "type": "object"
+    },
+    "ReportResearch": {
+      "description": "Research section of the canonical report.",
+      "properties": {
+        "description": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Claim"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "founded_year": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Claim"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "headquarters": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Claim"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "employee_count": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Claim"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "industry": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Claim"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "website": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Claim"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "key_products": {
+          "items": {
+            "$ref": "#/$defs/Claim"
+          },
+          "title": "Key Products",
+          "type": "array"
+        },
+        "key_leadership": {
+          "items": {
+            "$ref": "#/$defs/Claim"
+          },
+          "title": "Key Leadership",
+          "type": "array"
+        },
+        "technology_stack": {
+          "items": {
+            "$ref": "#/$defs/Claim"
+          },
+          "title": "Technology Stack",
+          "type": "array"
+        },
+        "recent_developments": {
+          "items": {
+            "$ref": "#/$defs/Claim"
+          },
+          "title": "Recent Developments",
+          "type": "array"
+        },
+        "patent_count": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Claim"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "notable_patents": {
+          "items": {
+            "$ref": "#/$defs/Claim"
+          },
+          "title": "Notable Patents",
+          "type": "array"
+        }
+      },
+      "title": "ReportResearch",
+      "type": "object"
+    },
+    "ReportRisk": {
+      "description": "Risk section of the canonical report.",
+      "properties": {
+        "overall_risk_rating": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Claim"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "risk_summary": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Claim"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "regulatory_risks": {
+          "items": {
+            "$ref": "#/$defs/Claim"
+          },
+          "title": "Regulatory Risks",
+          "type": "array"
+        },
+        "legal_risks": {
+          "items": {
+            "$ref": "#/$defs/Claim"
+          },
+          "title": "Legal Risks",
+          "type": "array"
+        },
+        "cybersecurity_risks": {
+          "items": {
+            "$ref": "#/$defs/Claim"
+          },
+          "title": "Cybersecurity Risks",
+          "type": "array"
+        },
+        "operational_risks": {
+          "items": {
+            "$ref": "#/$defs/Claim"
+          },
+          "title": "Operational Risks",
+          "type": "array"
+        },
+        "reputational_risks": {
+          "items": {
+            "$ref": "#/$defs/Claim"
+          },
+          "title": "Reputational Risks",
+          "type": "array"
+        },
+        "esg_risks": {
+          "items": {
+            "$ref": "#/$defs/Claim"
+          },
+          "title": "Esg Risks",
+          "type": "array"
+        },
+        "pending_litigation": {
+          "items": {
+            "$ref": "#/$defs/Claim"
+          },
+          "title": "Pending Litigation",
+          "type": "array"
+        },
+        "government_contract_exposure": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Claim"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "notable_federal_contracts": {
+          "items": {
+            "$ref": "#/$defs/Claim"
+          },
+          "title": "Notable Federal Contracts",
+          "type": "array"
+        }
+      },
+      "title": "ReportRisk",
+      "type": "object"
+    },
+    "ReportSocialMedia": {
+      "description": "Social media section of the canonical report.",
+      "properties": {
+        "overall_sentiment": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Claim"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "sentiment_summary": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Claim"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "twitter_presence": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Claim"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "linkedin_presence": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Claim"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "reddit_sentiment": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Claim"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "glassdoor_rating": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Claim"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "notable_mentions": {
+          "items": {
+            "$ref": "#/$defs/Claim"
+          },
+          "title": "Notable Mentions",
+          "type": "array"
+        },
+        "trending_topics": {
+          "items": {
+            "$ref": "#/$defs/Claim"
+          },
+          "title": "Trending Topics",
+          "type": "array"
+        },
+        "customer_complaints": {
+          "items": {
+            "$ref": "#/$defs/Claim"
+          },
+          "title": "Customer Complaints",
+          "type": "array"
+        },
+        "positive_signals": {
+          "items": {
+            "$ref": "#/$defs/Claim"
+          },
+          "title": "Positive Signals",
+          "type": "array"
+        }
+      },
+      "title": "ReportSocialMedia",
+      "type": "object"
+    },
+    "ReportSynthesis": {
+      "description": "Synthesis section of the canonical report.",
+      "properties": {
+        "recommendation": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Claim"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "recommendation_rationale": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Claim"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "executive_summary": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Claim"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "key_strengths": {
+          "items": {
+            "$ref": "#/$defs/Claim"
+          },
+          "title": "Key Strengths",
+          "type": "array"
+        },
+        "key_concerns": {
+          "items": {
+            "$ref": "#/$defs/Claim"
+          },
+          "title": "Key Concerns",
+          "type": "array"
+        },
+        "red_flags": {
+          "items": {
+            "$ref": "#/$defs/Claim"
+          },
+          "title": "Red Flags",
+          "type": "array"
+        },
+        "data_conflicts": {
+          "items": {
+            "$ref": "#/$defs/Claim"
+          },
+          "title": "Data Conflicts",
+          "type": "array"
+        },
+        "follow_up_questions": {
+          "items": {
+            "$ref": "#/$defs/Claim"
+          },
+          "title": "Follow Up Questions",
+          "type": "array"
+        },
+        "data_quality": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Claim"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "ReportSynthesis",
+      "type": "object"
+    },
+    "RunMetadata": {
+      "description": "Pipeline-level metrics embedded in every canonical report.",
+      "properties": {
+        "trace_id": {
+          "title": "Trace Id",
+          "type": "string"
+        },
+        "cost_usd": {
+          "title": "Cost Usd",
+          "type": "number"
+        },
+        "duration_ms": {
+          "title": "Duration Ms",
+          "type": "number"
+        },
+        "total_llm_calls": {
+          "title": "Total Llm Calls",
+          "type": "integer"
+        },
+        "total_tool_calls": {
+          "title": "Total Tool Calls",
+          "type": "integer"
+        },
+        "total_input_tokens": {
+          "title": "Total Input Tokens",
+          "type": "integer"
+        },
+        "total_output_tokens": {
+          "title": "Total Output Tokens",
+          "type": "integer"
+        },
+        "agents": {
+          "additionalProperties": {
+            "$ref": "#/$defs/AgentRunMetadata"
+          },
+          "title": "Agents",
+          "type": "object"
+        },
+        "tier_coverage": {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "title": "Tier Coverage",
+          "type": "object"
+        },
+        "tier_attempts": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "Tier Attempts",
+          "type": "object"
+        },
+        "edgar_lookup_status": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Edgar Lookup Status"
+        },
+        "edgar_cik": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Edgar Cik"
+        },
+        "section_confidences": {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "title": "Section Confidences",
+          "type": "object"
+        },
+        "overall_confidence": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Overall Confidence"
+        }
+      },
+      "required": [
+        "trace_id",
+        "cost_usd",
+        "duration_ms",
+        "total_llm_calls",
+        "total_tool_calls",
+        "total_input_tokens",
+        "total_output_tokens"
+      ],
+      "title": "RunMetadata",
+      "type": "object"
+    },
+    "SeverityLevel": {
+      "description": "How severe or impactful a risk is.\n\nSeparate from confidence (data reliability). A risk can be HIGH severity\nwith LOW confidence (e.g., unconfirmed but potentially catastrophic).",
+      "enum": [
+        "critical",
+        "high",
+        "medium",
+        "low"
+      ],
+      "title": "SeverityLevel",
+      "type": "string"
+    },
+    "SourceRef": {
+      "description": "A single source reference with provenance tier.\n\nretrieved_at is always null in P1 \u2014 it is part of the eventual P2/P3 contract\nwhere passage-level evidence is captured at retrieval time.",
+      "properties": {
+        "url": {
+          "title": "Url",
+          "type": "string"
+        },
+        "tier": {
+          "$ref": "#/$defs/SourceTier",
+          "default": "unknown"
+        },
+        "retrieved_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Retrieved At"
+        }
+      },
+      "required": [
+        "url"
+      ],
+      "title": "SourceRef",
+      "type": "object"
+    },
+    "SourceTier": {
+      "description": "Provenance tier for a source URL.\n\nMirrors the tiered source model in docs/STRATEGY.md \u00a73 Priority 3.\nP1: tier is inferred from domain patterns by the assembler.\nP3: tier will be recorded at retrieval time by the source registry.",
+      "enum": [
+        "primary_document",
+        "reputable_secondary",
+        "aggregator",
+        "community",
+        "unknown"
+      ],
+      "title": "SourceTier",
+      "type": "string"
+    }
+  },
+  "description": "Canonical due diligence report \u2014 the source of truth for all renderers.\n\nEvery run produces one ReportDocument, written to outputs/report_{slug}.json.\nThe markdown, PDF, and HTML files are renders of this document, not edited\nindependently.\n\nschema_version follows the policy in SCHEMA_VERSION above.",
+  "properties": {
+    "schema_version": {
+      "default": "1.0.6",
+      "description": "Schema version. See SCHEMA_VERSION in models.py for the versioning policy.",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "report_id": {
+      "description": "trace_id of the pipeline run that produced this report",
+      "title": "Report Id",
+      "type": "string"
+    },
+    "company_name": {
+      "title": "Company Name",
+      "type": "string"
+    },
+    "generated_at": {
+      "format": "date-time",
+      "title": "Generated At",
+      "type": "string"
+    },
+    "run_metadata": {
+      "$ref": "#/$defs/RunMetadata"
+    },
+    "synthesis": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ReportSynthesis"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "research": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ReportResearch"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "financial": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ReportFinancial"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "risk": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ReportRisk"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "social_media": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ReportSocialMedia"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "gaps": {
+      "items": {
+        "$ref": "#/$defs/GapRecord"
+      },
+      "title": "Gaps",
+      "type": "array"
+    }
+  },
+  "required": [
+    "report_id",
+    "company_name",
+    "generated_at",
+    "run_metadata"
+  ],
+  "title": "ReportDocument",
+  "type": "object"
+}

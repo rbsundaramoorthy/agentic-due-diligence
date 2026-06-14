@@ -1,0 +1,16 @@
+{
+  "company_name": "Stripe",
+  "research": {
+    "founded_year": "2010",
+    "headquarters": "San Francisco",
+    "industry": "fintech",
+    "website": "https://stripe.com",
+    "key_leadership": ["Patrick Collison", "John Collison"],
+    "key_products": ["Stripe Payments", "Stripe Connect", "Stripe Billing", "Stripe Atlas"]
+  },
+  "financial": {
+    "revenue": "billion",
+    "revenue_model": "transaction fees",
+    "key_investors": ["Sequoia Capital", "Andreessen Horowitz"]
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "hits": {
+    "total": {"value": 47, "relation": "eq"},
+    "hits": [
+      {
+        "_index": "edgar_file",
+        "_id": "0000320193-23-000106:aapl-20230930.htm",
+        "_score": 9.11,
+        "_source": {
+          "ciks": ["0000320193"],
+          "display_names": ["Apple Inc.  (AAPL)  (CIK 0000320193)"],
+          "adsh": "0000320193-23-000106",
+          "file_date": "2023-11-03",
+          "period_ending": "2023-09-30",
+          "form": "10-K",
+          "file_type": "10-K",
+          "file_description": "10-K",
+          "root_forms": ["10-K"],
+          "biz_locations": ["Cupertino, CA"],
+          "inc_states": ["CA"],
+          "biz_states": ["CA"],
+          "sics": ["3571"],
+          "file_num": ["001-36743"],
+          "sequence": 1,
+          "items": [],
+          "xsl": null
+        }
+      },
+      {
+        "_index": "edgar_file",
+        "_id": "0001185185-13-000452:applereitnine10k123112.htm",
+        "_score": 8.30,
+        "_source": {
+          "ciks": ["0001418121"],
+          "display_names": ["Apple REIT Nine, Inc.  (APLE)  (CIK 0001418121)"],
+          "adsh": "0001185185-13-000452",
+          "file_date": "2013-03-07",
+          "period_ending": "2012-12-31",
+          "form": "10-K",
+          "file_type": "10-K",
+          "file_description": null,
+          "root_forms": ["10-K"],
+          "biz_locations": ["Richmond, VA"],
+          "inc_states": ["VA"],
+          "biz_states": ["VA"],
+          "sics": ["6798"],
+          "file_num": ["000-53603"],
+          "sequence": 1,
+          "items": [],
+          "xsl": null
+        }
+      }
+    ]
+  }
+}

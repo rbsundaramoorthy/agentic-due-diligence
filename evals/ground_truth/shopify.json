@@ -1,0 +1,16 @@
+{
+  "company_name": "Shopify",
+  "research": {
+    "founded_year": "2006",
+    "headquarters": "Ottawa",
+    "industry": "e-commerce",
+    "website": "https://shopify.com",
+    "key_leadership": ["Tobi Lutke"],
+    "key_products": ["Shopify", "Shopify Plus", "Shopify POS"]
+  },
+  "financial": {
+    "revenue": "8.88",
+    "revenue_model": "subscription fees",
+    "key_investors": ["Bessemer Venture Partners", "FirstMark Capital"]
+  }
+}

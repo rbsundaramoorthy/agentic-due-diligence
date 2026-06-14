@@ -1,0 +1,31 @@
+{
+  "hits": {
+    "total": {"value": 153, "relation": "eq"},
+    "hits": [
+      {
+        "_index": "edgar_file",
+        "_id": "0001144204-15-012061:v400157_10k.htm",
+        "_score": 10.613807,
+        "_source": {
+          "ciks": ["0001418819"],
+          "display_names": ["Iridium Communications Inc.  (IRDM)  (CIK 0001418819)"],
+          "adsh": "0001144204-15-012061",
+          "file_date": "2015-02-26",
+          "period_ending": "2014-12-31",
+          "form": "10-K",
+          "file_type": "10-K",
+          "file_description": "10-K",
+          "root_forms": ["10-K"],
+          "biz_locations": ["Mclean, VA"],
+          "inc_states": ["DE"],
+          "biz_states": ["VA"],
+          "sics": ["3669"],
+          "file_num": ["001-33963"],
+          "sequence": 1,
+          "items": [],
+          "xsl": null
+        }
+      }
+    ]
+  }
+}

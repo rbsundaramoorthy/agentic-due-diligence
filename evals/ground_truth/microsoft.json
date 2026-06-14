@@ -1,0 +1,15 @@
+{
+  "company_name": "Microsoft",
+  "research": {
+    "founded_year": "1975",
+    "headquarters": "Redmond",
+    "industry": "technology",
+    "website": "https://microsoft.com",
+    "key_leadership": ["Satya Nadella"],
+    "key_products": ["Azure", "Microsoft 365", "Windows", "GitHub", "Copilot"]
+  },
+  "financial": {
+    "revenue": "245",
+    "revenue_model": "cloud"
+  }
+}

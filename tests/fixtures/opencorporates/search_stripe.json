@@ -1,0 +1,33 @@
+{
+  "api_version": "0.4",
+  "results": {
+    "companies": [
+      {
+        "company": {
+          "name": "Stripe, Inc.",
+          "company_number": "C3633325",
+          "jurisdiction_code": "us_ca",
+          "incorporation_date": "2010-09-07",
+          "dissolution_date": null,
+          "company_type": "Domestic Stock Corporation",
+          "registry_url": "https://bizfileonline.sos.ca.gov/search/business/C3633325",
+          "branch": null,
+          "branch_status": null,
+          "inactive": false,
+          "current_status": "Active",
+          "created_at": "2012-01-01T00:00:00+00:00",
+          "updated_at": "2024-01-15T00:00:00+00:00",
+          "retrieved_at": "2024-01-15T00:00:00+00:00",
+          "opencorporates_url": "https://opencorporates.com/companies/us_ca/C3633325",
+          "registered_address_in_full": "354 Oyster Point Blvd, South San Francisco, CA 94080",
+          "restricted_for_marketing": null,
+          "native_company_number": "C3633325"
+        }
+      }
+    ],
+    "page": 1,
+    "per_page": 20,
+    "total_count": 1,
+    "total_pages": 1
+  }
+}

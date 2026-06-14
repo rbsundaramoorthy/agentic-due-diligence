@@ -1,0 +1,101 @@
+{
+  "count": 755,
+  "next": "https://www.courtlistener.com/api/rest/v4/search/?order_by=score+desc&page=2&page_size=10&q=%22Example+Aerospace+Corp%22&type=d",
+  "previous": null,
+  "results": [
+    {
+      "assignedTo": null,
+      "assigned_to_id": null,
+      "attorney": [
+        "Shannon Liss-Riordan"
+      ],
+      "attorney_id": [
+        13563722
+      ],
+      "caseName": "Romero v. Example Aerospace Corp",
+      "case_name_full": "",
+      "cause": "28:1332bc Diversity-Breach of Contract",
+      "chapter": null,
+      "court": "District Court, S.D. New York",
+      "court_citation_string": "S.D.N.Y.",
+      "court_id": "nysd",
+      "dateArgued": null,
+      "dateFiled": "2026-05-08",
+      "dateTerminated": null,
+      "docketNumber": "1:26-cv-03843",
+      "docket_absolute_url": "/docket/73317853/romero-v-example-aerospace-corp/",
+      "docket_id": 73317853,
+      "firm": [
+        "Lichten & Liss-Riordan"
+      ],
+      "firm_id": [
+        101457
+      ],
+      "jurisdictionType": "Diversity",
+      "juryDemand": "Plaintiff",
+      "meta": {
+        "timestamp": "2026-05-08T19:44:07.951181Z",
+        "date_created": "2026-05-08T19:43:42.731675Z",
+        "score": {
+          "bm25": 303.6153
+        }
+      },
+      "pacer_case_id": "663662",
+      "party": [
+        "Evan Romero",
+        "Example Aerospace Corp"
+      ],
+      "party_id": [
+        19742248,
+        19742247
+      ],
+      "referredTo": null,
+      "referred_to_id": null,
+      "suitNature": "190 Contract: Other",
+      "trustee_str": null
+    },
+    {
+      "assignedTo": "G. Michael Harvey",
+      "assigned_to_id": 9133,
+      "attorney": [],
+      "attorney_id": [],
+      "caseName": "United States v. SEIZURE OF NINE TERMINALS AND ASSOCIATED ACCOUNTS UNDER THE CONTROL OF EXAMPLE AEROSPACE CORP FOR VIOLATIONS OF 18 U.S.C. §§ 1349, 1956",
+      "case_name_full": "",
+      "cause": "",
+      "chapter": null,
+      "court": "District Court, District of Columbia",
+      "court_citation_string": "D.D.C.",
+      "court_id": "dcd",
+      "dateArgued": null,
+      "dateFiled": "2025-11-07",
+      "dateTerminated": null,
+      "docketNumber": "1:25-sz-00048",
+      "docket_absolute_url": "/docket/71926259/united-states-v-seizure-of-nine-terminals-and-associated-accounts/",
+      "docket_id": 71926259,
+      "firm": [],
+      "firm_id": [],
+      "jurisdictionType": "",
+      "juryDemand": "",
+      "meta": {
+        "timestamp": "2025-11-18T16:43:43.644227Z",
+        "date_created": "2025-11-18T16:43:39.095954Z",
+        "score": {
+          "bm25": 116.47953
+        }
+      },
+      "pacer_case_id": "286668",
+      "party": [
+        "USA",
+        "SEIZURE OF NINE TERMINALS AND ASSOCIATED ACCOUNTS UNDER THE CONTROL OF EXAMPLE AEROSPACE CORP FOR VIOLATIONS OF 18 U.S.C. §§ 1349, 1956"
+      ],
+      "party_id": [
+        16707125,
+        16707126
+      ],
+      "referredTo": null,
+      "referred_to_id": null,
+      "suitNature": "",
+      "trustee_str": null
+    }
+  ]
+}

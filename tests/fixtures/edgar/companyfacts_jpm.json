@@ -1,0 +1,38 @@
+{
+  "cik": 19617,
+  "entityName": "JPMorgan Chase & Co.",
+  "facts": {
+    "us-gaap": {
+      "InterestAndDividendIncomeOperating": {
+        "label": "Interest and Dividend Income, Operating",
+        "description": "Represents the total of interest and dividend income.",
+        "units": {
+          "USD": [
+            {"end": "2022-12-31", "val": 72098000000, "accn": "0000019617-23-000021", "fy": 2022, "fp": "FY", "form": "10-K", "filed": "2023-02-21", "frame": "CY2022"},
+            {"end": "2023-12-31", "val": 89272000000, "accn": "0000019617-24-000018", "fy": 2023, "fp": "FY", "form": "10-K", "filed": "2024-02-16", "frame": "CY2023"}
+          ]
+        }
+      },
+      "NoninterestIncome": {
+        "label": "Noninterest Income",
+        "description": "The total amount of noninterest income.",
+        "units": {
+          "USD": [
+            {"end": "2022-12-31", "val": 57990000000, "accn": "0000019617-23-000021", "fy": 2022, "fp": "FY", "form": "10-K", "filed": "2023-02-21", "frame": "CY2022"},
+            {"end": "2023-12-31", "val": 69380000000, "accn": "0000019617-24-000018", "fy": 2023, "fp": "FY", "form": "10-K", "filed": "2024-02-16", "frame": "CY2023"}
+          ]
+        }
+      },
+      "NetIncomeLoss": {
+        "label": "Net Income (Loss)",
+        "description": "The portion of profit or loss for the period, net of income taxes.",
+        "units": {
+          "USD": [
+            {"end": "2022-12-31", "val": 37676000000, "accn": "0000019617-23-000021", "fy": 2022, "fp": "FY", "form": "10-K", "filed": "2023-02-21", "frame": "CY2022"},
+            {"end": "2023-12-31", "val": 49552000000, "accn": "0000019617-24-000018", "fy": 2023, "fp": "FY", "form": "10-K", "filed": "2024-02-16", "frame": "CY2023"}
+          ]
+        }
+      }
+    }
+  }
+}

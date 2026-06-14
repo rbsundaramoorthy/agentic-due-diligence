@@ -1,0 +1,38 @@
+# Environment
+.env
+.venv/
+venv/
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+build/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+
+# runtime / generated artifacts
+agent_log.db
+agent_log.db-wal
+agent_log.db-shm
+*.db
+*.db-wal
+*.db-shm
+
+# generated report outputs (point these at your real output dir)
+outputs/
+reports/
+
+CLAUDE.md
+.pytest_cache/
+venv/
+_pycache_/
+.pytest_cache/
+.claude/

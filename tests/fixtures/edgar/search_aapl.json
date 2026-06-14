@@ -1,0 +1,55 @@
+{
+  "hits": {
+    "total": {"value": 1794, "relation": "eq"},
+    "hits": [
+      {
+        "_index": "edgar_file",
+        "_id": "0000320193-25-000079:a10-kexhibit2309272025.htm",
+        "_score": 9.43,
+        "_source": {
+          "ciks": ["0000320193"],
+          "display_names": ["Apple Inc.  (AAPL)  (CIK 0000320193)"],
+          "adsh": "0000320193-25-000079",
+          "file_date": "2025-10-31",
+          "period_ending": "2025-09-27",
+          "form": "10-K",
+          "file_type": "EX-23.1",
+          "file_description": "EX-23.1",
+          "root_forms": ["10-K"],
+          "biz_locations": ["Cupertino, CA"],
+          "inc_states": ["CA"],
+          "biz_states": ["CA"],
+          "sics": ["3571"],
+          "file_num": ["001-36743"],
+          "sequence": "9",
+          "items": [],
+          "xsl": null
+        }
+      },
+      {
+        "_index": "edgar_file",
+        "_id": "0000320193-25-000079:aapl-20250927.htm",
+        "_score": 9.27,
+        "_source": {
+          "ciks": ["0000320193"],
+          "display_names": ["Apple Inc.  (AAPL)  (CIK 0000320193)"],
+          "adsh": "0000320193-25-000079",
+          "file_date": "2025-10-31",
+          "period_ending": "2025-09-27",
+          "form": "10-K",
+          "file_type": "10-K",
+          "file_description": "10-K",
+          "root_forms": ["10-K"],
+          "biz_locations": ["Cupertino, CA"],
+          "inc_states": ["CA"],
+          "biz_states": ["CA"],
+          "sics": ["3571"],
+          "file_num": ["001-36743"],
+          "sequence": 1,
+          "items": [],
+          "xsl": null
+        }
+      }
+    ]
+  }
+}

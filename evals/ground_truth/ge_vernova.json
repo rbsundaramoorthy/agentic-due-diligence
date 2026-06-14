@@ -1,0 +1,15 @@
+{
+  "company_name": "GE Vernova",
+  "research": {
+    "founded_year": "2024",
+    "headquarters": "Cambridge",
+    "industry": "energy",
+    "website": "https://gevernova.com",
+    "key_leadership": ["Scott Strazik"],
+    "key_products": ["gas turbines", "wind turbines", "grid solutions"]
+  },
+  "financial": {
+    "revenue": "34",
+    "revenue_model": "equipment"
+  }
+}

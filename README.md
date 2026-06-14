@@ -17,7 +17,7 @@ traceable outputs and structured data — not narrative polish.
 
 ```bash
 # 1. Clone and install
-git clone https://github.com/sunlightware/agentic-due-diligence.git
+git clone https://github.com/rbsundaramoorthy/agentic-due-diligence.git
 cd agentic-due-diligence
 pip install -e .
 
@@ -435,4 +435,4 @@ Capabilities not yet built:
   reproducibility.
 
 - **Plugin architecture.** Adding a new source or agent requires code changes.
-  A pluggable interface is planned but not built.
+  A pluggable interface is planned but not built yet.

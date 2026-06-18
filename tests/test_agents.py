@@ -821,6 +821,106 @@ class TestReportConfidenceScore:
         assert score == pytest.approx(0.60)
 
 
+# ── Soft Budget Tests ──────────────────────────────────────────────
+
+class TestSoftBudget:
+    @pytest.mark.asyncio
+    async def test_budget_exhausted_forces_partial_with_valid_data(self):
+        """Budget=0 expires before turn 0; tools are omitted, result is partial with non-null data."""
+        client = make_mock_client()
+        client.messages.create.return_value = _make_text_response(
+            json.dumps(VALID_RESEARCH_JSON)
+        )
+        agent = ResearchAgent(tracer=make_tracer(), client=client)
+        agent.soft_budget_seconds = 0  # elapsed >= 0 is always True at turn 0
+
+        result = await agent.run("Research TestCo")
+
+        assert result["status"] == "partial"
+        assert result["data"] is not None, "data must be non-null even on budget-forced partial"
+        assert result["data"]["company_name"] == "TestCo"
+        assert any("budget" in g.lower() for g in result["gaps"])
+
+        # The LLM call must not include tools when budget is exhausted
+        call_kwargs = client.messages.create.call_args.kwargs
+        assert "tools" not in call_kwargs, "tools must be omitted when budget is exhausted"
+
+    @pytest.mark.asyncio
+    async def test_no_budget_completes_normally(self):
+        """Without soft_budget_seconds, a successful run returns status=complete."""
+        client = make_mock_client()
+        client.messages.create.return_value = _make_text_response(
+            json.dumps(VALID_RESEARCH_JSON)
+        )
+        agent = ResearchAgent(tracer=make_tracer(), client=client)
+        # soft_budget_seconds defaults to None
+
+        result = await agent.run("Research TestCo")
+
+        assert result["status"] == "complete"
+        assert result["gaps"] == []
+
+        # Tools must be included when budget is not set
+        call_kwargs = client.messages.create.call_args.kwargs
+        assert "tools" in call_kwargs
+
+
+# ── Web Search Volume Cap Tests ────────────────────────────────────
+
+class TestWebSearchVolumeCaps:
+    def setup_method(self):
+        self.agent = FinancialAgent(tracer=make_tracer(), client=make_mock_client())
+
+    @pytest.mark.asyncio
+    async def test_web_search_caps_above_max(self):
+        """Requests for more than MAX_SEARCH_RESULTS are silently capped."""
+        with patch("src.agents.base.web_search", new_callable=AsyncMock) as mock:
+            mock.return_value = "[]"
+            await self.agent.handle_tool_call(
+                "web_search", {"query": "test", "max_results": 100}
+            )
+            mock.assert_called_once_with(
+                query="test", max_results=self.agent.MAX_SEARCH_RESULTS
+            )
+
+    @pytest.mark.asyncio
+    async def test_web_search_does_not_inflate_below_cap(self):
+        """Requests below MAX_SEARCH_RESULTS are passed through unchanged."""
+        with patch("src.agents.base.web_search", new_callable=AsyncMock) as mock:
+            mock.return_value = "[]"
+            await self.agent.handle_tool_call(
+                "web_search", {"query": "test", "max_results": 2}
+            )
+            mock.assert_called_once_with(query="test", max_results=2)
+
+    @pytest.mark.asyncio
+    async def test_web_fetch_blocked_after_max_fetches(self):
+        """web_fetch calls beyond MAX_FETCHES return a budget-exhausted error, not an exception."""
+        with patch("src.agents.base.web_fetch", new_callable=AsyncMock) as mock:
+            mock.return_value = "page content"
+            for _ in range(self.agent.MAX_FETCHES):
+                result = await self.agent.handle_tool_call(
+                    "web_fetch", {"url": "http://test.com"}
+                )
+                assert result == "page content"
+            # The (MAX_FETCHES+1)th call must be blocked
+            blocked = await self.agent.handle_tool_call(
+                "web_fetch", {"url": "http://test.com"}
+            )
+            blocked_data = json.loads(blocked)
+            assert "error" in blocked_data
+            assert "exhausted" in blocked_data["error"].lower()
+            assert mock.call_count == self.agent.MAX_FETCHES
+
+    @pytest.mark.asyncio
+    async def test_fetch_count_is_zero_on_new_agent(self):
+        """Each new agent instance starts with a fresh fetch counter."""
+        a1 = FinancialAgent(tracer=make_tracer(), client=make_mock_client())
+        a2 = FinancialAgent(tracer=make_tracer(), client=make_mock_client())
+        assert a1._fetch_count == 0
+        assert a2._fetch_count == 0
+
+
 # ── AgentDB Tests ─────────────────────────────────────────────────
 
 class TestAgentDB:

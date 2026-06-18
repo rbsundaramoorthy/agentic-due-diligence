@@ -18,6 +18,40 @@ from src.agents.base import BaseAgent
 from src.schemas.models import CompanySynthesis
 
 
+def _edgar_overlay_financial_dict(
+    financial_data: Optional[dict],
+    edgar_data: Optional[dict],
+) -> Optional[dict]:
+    """Return a view of financial_data with EDGAR revenue/profitability overlaid.
+
+    Gives the synthesis agent a view of the MERGED financial state that matches
+    what assemble_report will produce via _merge_edgar. Only fires when
+    edgar_lookup_status == "succeeded" and the EDGAR DataPoint has non-unknown
+    confidence — mirrors the guard logic in the assembler's _merge_edgar.
+
+    The original financial_data dict is never mutated. The _claim_id from the
+    original DataPoint is preserved so synthesis can reference it in synthesized_from;
+    the assembler will replace those claims with EDGAR's own Claim objects (new
+    claim_ids), and any dangling synthesized_from refs are stripped by
+    _validate_synthesized_from with a warning.
+    """
+    if not financial_data or not edgar_data:
+        return financial_data
+    if edgar_data.get("edgar_lookup_status") != "succeeded":
+        return financial_data
+    result = dict(financial_data)  # shallow copy — only top-level field pointers replaced
+    for field in ("revenue", "profitability"):
+        dp = edgar_data.get(field)
+        if dp and dp.get("confidence") not in (None, "unknown"):
+            merged_dp = dict(dp)  # shallow copy of edgar DataPoint
+            original = financial_data.get(field) or {}
+            if "_claim_id" in original:
+                # Carry forward the pre-assigned ID so synthesis can cite it.
+                merged_dp["_claim_id"] = original["_claim_id"]
+            result[field] = merged_dp
+    return result
+
+
 OUTPUT_SCHEMA = """{
   "company_name": "string",
   "executive_summary": {
@@ -79,6 +113,12 @@ def build_synthesis_task(
     Serializes all agent outputs into a single message. Each section is
     capped at 8,000 chars to stay within context budget while preserving detail.
     """
+    # Show synthesis the EDGAR-merged financial state rather than the pre-merge
+    # deferrals that the financial agent returns for US public companies.  This
+    # mirrors what assemble_report._merge_edgar produces at assembly time so that
+    # data_quality and data_conflicts reflect the FINAL report state.
+    financial_for_synthesis = _edgar_overlay_financial_dict(financial_data, edgar_data)
+
     def _format(data: Optional[dict], max_chars: int = 8000) -> str:
         if data is None:
             return "(agent did not complete successfully — treat as unavailable)"
@@ -133,7 +173,7 @@ all outputs and reason about the full picture.
 {_format(research_data)}
 
 == FINANCIAL AGENT ==
-{_format(financial_data)}
+{_format(financial_for_synthesis)}
 
 == RISK AGENT ==
 {_format(risk_data)}

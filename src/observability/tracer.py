@@ -27,7 +27,7 @@ from rich.table import Table
 # Cost per million tokens (Claude Sonnet 4 pricing as of Mar 2026)
 # Update these when pricing changes
 MODEL_COSTS = {
-    "claude-sonnet-4-20250514": {"input": 3.00, "output": 15.00},
+    "claude-sonnet-4-6": {"input": 3.00, "output": 15.00},
     "claude-haiku-4-5-20251001": {"input": 0.80, "output": 4.00},
 }
 
@@ -83,7 +83,7 @@ class AgentTracer:
         tracer = AgentTracer("Stripe")
         span = tracer.start_span("extract_company_info", "research", "llm_call")
         # ... do work ...
-        tracer.end_span(span, input_tokens=500, output_tokens=200, model="claude-sonnet-4-20250514")
+        tracer.end_span(span, input_tokens=500, output_tokens=200, model="claude-sonnet-4-6")
         tracer.persist("outputs/agent_log.db")
         tracer.print_summary()
     """

@@ -127,7 +127,7 @@ class TestAgentTracer:
             span,
             input_tokens=500,
             output_tokens=200,
-            model="claude-sonnet-4-20250514",
+            model="claude-sonnet-4-6",
         )
 
         summary = tracer.summary()
@@ -140,13 +140,13 @@ class TestAgentTracer:
         tracer = AgentTracer()
 
         s1 = tracer.start_span("research_llm", "research", "llm_call")
-        tracer.end_span(s1, input_tokens=100, output_tokens=50, model="claude-sonnet-4-20250514")
+        tracer.end_span(s1, input_tokens=100, output_tokens=50, model="claude-sonnet-4-6")
 
         s2 = tracer.start_span("research_tool", "research", "tool_call")
         tracer.end_span(s2)
 
         s3 = tracer.start_span("financial_llm", "financial", "llm_call")
-        tracer.end_span(s3, input_tokens=200, output_tokens=100, model="claude-sonnet-4-20250514")
+        tracer.end_span(s3, input_tokens=200, output_tokens=100, model="claude-sonnet-4-6")
 
         summary = tracer.summary()
         assert summary["total_llm_calls"] == 2
@@ -168,7 +168,7 @@ class TestAgentTracer:
             span_type="llm_call",
             input_tokens=1_000_000,  # 1M tokens
             output_tokens=1_000_000,
-            model="claude-sonnet-4-20250514",
+            model="claude-sonnet-4-6",
         )
         # Sonnet 4: $3/M input + $15/M output = $18
         assert span.cost_usd == pytest.approx(18.0, rel=0.01)
@@ -184,7 +184,7 @@ class TestAgentTracer:
     def test_spans_carry_run_id(self):
         tracer = AgentTracer("Acme")
         span = tracer.start_span("test_call", "research", "llm_call")
-        tracer.end_span(span, input_tokens=100, output_tokens=50, model="claude-sonnet-4-20250514")
+        tracer.end_span(span, input_tokens=100, output_tokens=50, model="claude-sonnet-4-6")
         assert span.run_id == tracer.run_id
         assert len(span.span_id) == 12
         assert span.span_id != tracer.run_id
@@ -196,7 +196,7 @@ class TestAgentTracer:
         tracer = AgentTracer("TestCo")
 
         s1 = tracer.start_span("llm_turn_0", "research", "llm_call")
-        tracer.end_span(s1, input_tokens=500, output_tokens=200, model="claude-sonnet-4-20250514")
+        tracer.end_span(s1, input_tokens=500, output_tokens=200, model="claude-sonnet-4-6")
 
         s2 = tracer.start_span("tool_search", "research", "tool_call", tool_name="web_search")
         s2.tool_name = "web_search"

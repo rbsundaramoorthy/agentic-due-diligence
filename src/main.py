@@ -40,6 +40,7 @@ from evals.eval_runner import GroundTruthEvaluator, persist_eval_results, print_
 console = Console()
 
 _AGENT_TIMEOUT = 300  # seconds — p99 observed max is ~174s; 300s catches genuine hangs
+_SOFT_BUDGET = int(_AGENT_TIMEOUT * 0.70)  # 210s — soft budget; agent forced to reflect early
 
 
 async def _run_with_timeout(agent, task: str) -> dict:
@@ -47,7 +48,7 @@ async def _run_with_timeout(agent, task: str) -> dict:
         return await asyncio.wait_for(agent.run(task), timeout=_AGENT_TIMEOUT)
     except asyncio.TimeoutError:
         console.print(f"  [bold red]⚠ {agent.AGENT_NAME} timed out after {_AGENT_TIMEOUT}s[/bold red]")
-        return {"status": "failed", "data": None, "gaps": ["Agent timed out"],
+        return {"status": "partial", "data": None, "gaps": ["Agent timed out — hard budget exceeded"],
                 "error_summary": f"Timed out after {_AGENT_TIMEOUT}s"}
 
 
@@ -94,6 +95,11 @@ async def run_due_diligence(company_name: str, json_only: bool = False) -> Agent
     risk_agent = RiskAgent(tracer=tracer, client=client, db=agent_db, company_context=company_context)
     social_media_agent = SocialMediaAgent(tracer=tracer, client=client, db=agent_db, company_context=company_context)
     edgar_agent = EdgarAgent(tracer=tracer, client=client, db=agent_db, company_context=company_context, cache=source_cache)
+
+    # Soft budget: force reflection at 70% of the hard timeout, leaving 90s for
+    # the model to emit its final JSON. EDGAR is deterministic so it's excluded.
+    for _a in (research_agent, financial_agent, risk_agent, social_media_agent):
+        _a.soft_budget_seconds = _SOFT_BUDGET
 
     research_result, financial_result, risk_result, social_media_result, edgar_result = await asyncio.gather(
         _run_with_timeout(research_agent,

@@ -12,6 +12,7 @@ pipeline stage had explicit states, transitions, and validation checkpoints.
 """
 
 import json
+import time
 from abc import ABC, abstractmethod
 from datetime import date
 from enum import Enum
@@ -113,7 +114,7 @@ class BaseAgent(ABC):
     """
 
     AGENT_NAME: str = "base"
-    MODEL: str = "claude-sonnet-4-20250514"
+    MODEL: str = "claude-sonnet-4-6"
     PROMPT_VERSION: str = "1.0"
     MAX_RETRIES: int = 3
     MAX_TURNS: int = 10  # Max tool-use turns before forcing completion
@@ -132,6 +133,7 @@ class BaseAgent(ABC):
         self.state = AgentState.PLANNING
         self.messages: List[dict] = []
         self.retries = 0
+        self.soft_budget_seconds: Optional[float] = None
 
     def _format_context(self) -> str:
         """Render current date and optional company_context as a prompt block."""
@@ -207,6 +209,8 @@ class BaseAgent(ABC):
         total_cost = 0.0
         total_tool_calls = 0
         message_seq = 0
+        run_start = time.monotonic()
+        _budget_forced = False
 
         # Log initial user task as first message
         if self.db:
@@ -217,6 +221,29 @@ class BaseAgent(ABC):
             message_seq += 1
 
         for turn in range(self.MAX_TURNS):
+            # Check soft budget before the LLM call — if exceeded, omit tools so
+            # the model is forced to emit text (can't call tools if none are offered).
+            # Must be checked here, not after, to avoid API protocol violations:
+            # if the previous turn returned tool_use, we must send tool_results
+            # before removing tools.
+            _budget_exhausted = (
+                self.soft_budget_seconds is not None
+                and time.monotonic() - run_start >= self.soft_budget_seconds
+            )
+            if _budget_exhausted:
+                _budget_forced = True
+
+            effective_system = system_prompt
+            if _budget_exhausted:
+                effective_system = (
+                    system_prompt
+                    + "\n\n⚠ RESEARCH BUDGET REACHED: Stop calling tools. "
+                    "Emit your final structured JSON output now using everything "
+                    "gathered so far. For any field you did not reach, use "
+                    'value="unknown", confidence="unknown", sources=[], '
+                    'reasoning="Research budget reached before investigation."'
+                )
+
             # Call the LLM
             span = self.tracer.start_span(
                 name=f"{self.AGENT_NAME}_llm_turn_{turn}",
@@ -225,13 +252,15 @@ class BaseAgent(ABC):
             )
 
             try:
-                response = self.client.messages.create(
+                call_kwargs: dict = dict(
                     model=self.MODEL,
                     max_tokens=4096,
-                    system=system_prompt,
-                    tools=tools,
+                    system=effective_system,
                     messages=self.messages,
                 )
+                if not _budget_exhausted:
+                    call_kwargs["tools"] = tools
+                response = self.client.messages.create(**call_kwargs)
                 self.tracer.end_span(
                     span,
                     input_tokens=response.usage.input_tokens,
@@ -375,10 +404,11 @@ class BaseAgent(ABC):
                 try:
                     parsed = self.parse_final_output(final_text)
                     self._transition(AgentState.COMPLETE)
+                    _final_status = "partial" if _budget_forced else "complete"
                     if self.db:
                         self.db.end_run(
                             trace_id=trace_id, agent=self.AGENT_NAME,
-                            status="complete", total_turns=turn + 1,
+                            status=_final_status, total_turns=turn + 1,
                             total_tool_calls=total_tool_calls,
                             total_input_tokens=total_input_tokens,
                             total_output_tokens=total_output_tokens,
@@ -386,9 +416,9 @@ class BaseAgent(ABC):
                             result_json=json.dumps(parsed, default=str),
                         )
                     return {
-                        "status": "complete",
+                        "status": _final_status,
                         "data": parsed,
-                        "gaps": [],
+                        "gaps": ["Research time budget reached; some fields may have limited coverage"] if _budget_forced else [],
                         "error_summary": None,
                     }
                 except Exception as e:
@@ -481,16 +511,27 @@ class WebSearchMixin(BaseAgent):
     eliminates that duplication — subclass this instead of BaseAgent directly.
     """
 
+    MAX_SEARCH_RESULTS: int = 5   # cap per search call regardless of agent request
+    MAX_FETCHES: int = 4          # per-run cap on web_fetch calls
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._fetch_count: int = 0
+
     def get_tools(self) -> list:
         return [_WEB_SEARCH_TOOL, _WEB_FETCH_TOOL]
 
     async def handle_tool_call(self, tool_name: str, tool_input: dict) -> str:
         if tool_name == "web_search":
-            return await web_search(
-                query=tool_input["query"],
-                max_results=tool_input.get("max_results", 5),
-            )
+            max_results = min(tool_input.get("max_results", 5), self.MAX_SEARCH_RESULTS)
+            return await web_search(query=tool_input["query"], max_results=max_results)
         elif tool_name == "web_fetch":
+            if self._fetch_count >= self.MAX_FETCHES:
+                return json.dumps({
+                    "error": "web_fetch budget exhausted",
+                    "note": "No further fetches available. Use gathered data to complete analysis.",
+                })
+            self._fetch_count += 1
             try:
                 return await web_fetch(url=tool_input["url"])
             except Exception as e:

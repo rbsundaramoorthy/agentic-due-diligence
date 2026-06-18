@@ -11,6 +11,74 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Synthesis reconciliation with EDGAR-merged financials (2026-06-17):**
+  Synthesis now evaluates `data_quality` and `data_conflicts` against the
+  EDGAR-merged financial state, not the pre-merge deferrals.
+
+  Root cause: the financial agent returns `revenue/profitability = unknown`
+  for US public companies (by design — EDGAR provides the authoritative values).
+  The EDGAR-to-financial merge runs in the assembler, AFTER synthesis. Synthesis
+  therefore saw unknown financials and wrote `data_quality.reasoning` describing
+  them as deferred or unverified, and in some cases raised a spurious
+  `data_conflicts` entry contrasting the financial agent's unknown with EDGAR's
+  confirmed values — even though the final report showed those fields at
+  primary_document tier with high confidence.
+
+  Fix: `_edgar_overlay_financial_dict()` in `src/agents/synthesis.py` creates
+  a shallow-merged view of `financial_data` with EDGAR revenue/profitability
+  overlaid (same logic as `_merge_edgar` in the assembler, but at the dict
+  level, before Claim construction). `build_synthesis_task` passes this merged
+  view to the synthesis LLM. The assembler's own `_merge_edgar` is unchanged —
+  it still runs at assembly time on the Claim objects.
+
+  The original `financial_data` dict is not mutated. The `_claim_id` from the
+  original DataPoint is preserved in the overlay so synthesis can cite it in
+  `synthesized_from`; any dangling reference after assembly is stripped by
+  `_validate_synthesized_from` with a warning (pre-existing behavior — EDGAR
+  merge creates a new claim_id at assembly time).
+
+  Side-effect guards verified: financial values, tiers, and confidences in the
+  assembled report are unchanged; gap-pruning is unchanged; unrelated conflicts
+  are unaffected.
+
+  Tests: `TestEdgarOverlayFinancialDict` (10 cases) and
+  `TestBuildSynthesisTaskEdgarOverlay` (4 cases) in `tests/test_synthesis.py`.
+
+- **Graceful degradation for web agents (2026-06-17):** Web-searching agents
+  (Research, Financial, Risk, Social Media) no longer return `data=None` when
+  they run long. Two complementary changes:
+
+  - **Soft budget in `BaseAgent.run()` (`src/agents/base.py`):** Agents accept
+    a `soft_budget_seconds` instance variable (set by main.py to 70% of the
+    hard timeout, i.e. 210s out of 300s). At the start of each turn, elapsed
+    wall time is checked. When the soft budget is exceeded, the next LLM call
+    is made *without* the `tools` parameter — forcing the model to emit its
+    final JSON immediately rather than continue calling tools. A budget note is
+    appended to the system prompt for that call. On successful parse, the result
+    carries `status="partial"` and a gap note indicating limited coverage.
+    EDGAR agent is excluded (deterministic tool sequence, no benefit from soft
+    budget).
+
+  - **Volume caps in `WebSearchMixin` (`src/agents/base.py`):** `MAX_SEARCH_RESULTS=5`
+    caps how many results are fed to the model per search call (regardless of
+    what the agent requests). `MAX_FETCHES=4` caps the total number of
+    `web_fetch` calls per run; subsequent calls return a budget-exhausted JSON
+    rather than raising. Research and Risk agents inherit these caps via their
+    existing `super()` delegation chain.
+
+  - **Backstop upgrade in `main.py`:** The hard-timeout handler now returns
+    `status="partial"` (was `"failed"`) so timeouts produce the same schema as
+    normal partial results and are handled uniformly by downstream assembler
+    and renderers.
+
+  - **Tests (`tests/test_agents.py`):** `TestSoftBudget` and
+    `TestWebSearchVolumeCaps` cover: budget-exhausted forces partial with
+    non-null data; no-budget path stays complete; search cap; fetch cap;
+    per-agent fetch counter isolation.
+
+  - **Test fix (`tests/test_schemas_and_tracer.py`):** Model ID in tracer cost
+    tests updated from the retired `claude-sonnet-4-20250514` to `claude-sonnet-4-6`.
+
 - **EDGAR PR2 — S-1/424B prospectus support (2026-06-13):** Extends EDGAR
   to handle companies whose only SEC filings are a registration statement or
   prospectus (no 10-K yet). Primary use case: SpaceX (CIK 0001181412, ticker

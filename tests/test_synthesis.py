@@ -15,7 +15,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.agents.synthesis import SynthesisAgent, build_synthesis_task
+from src.agents.synthesis import SynthesisAgent, build_synthesis_task, _edgar_overlay_financial_dict
 from src.observability.tracer import AgentTracer
 from src.observability.agent_db import AgentDB
 from src.schemas.models import CompanySynthesis, ConfidenceLevel, SeverityLevel
@@ -303,3 +303,161 @@ class TestSynthesisAgentLoop:
         assert len(runs) == 1
         assert runs[0]["status"] == "complete"
         assert runs[0]["total_turns"] == 1
+
+
+# ── _edgar_overlay_financial_dict Tests ──────────────────────────────
+
+class TestEdgarOverlayFinancialDict:
+    def _fin(self, rev_value="unknown", rev_conf="unknown", claim_id=None, **extra):
+        dp = {"value": rev_value, "confidence": rev_conf, "sources": [], "reasoning": None}
+        if claim_id:
+            dp["_claim_id"] = claim_id
+        return {"company_name": "TestCo", "revenue": dp, **extra}
+
+    def _edgar(self, status="succeeded", rev_value="$100B", rev_conf="high"):
+        return {
+            "edgar_lookup_status": status,
+            "revenue": {"value": rev_value, "confidence": rev_conf, "sources": ["https://sec.gov/x"]},
+        }
+
+    def test_overlays_revenue_when_edgar_succeeded(self):
+        fin = self._fin(claim_id="abc123")
+        result = _edgar_overlay_financial_dict(fin, self._edgar())
+        assert result["revenue"]["value"] == "$100B"
+        assert result["revenue"]["confidence"] == "high"
+
+    def test_preserves_original_claim_id(self):
+        fin = self._fin(claim_id="abc123")
+        result = _edgar_overlay_financial_dict(fin, self._edgar())
+        assert result["revenue"]["_claim_id"] == "abc123"
+
+    def test_overlays_profitability_when_present(self):
+        fin = {
+            "company_name": "TestCo",
+            "revenue": {"value": "unknown", "confidence": "unknown", "sources": [], "_claim_id": "r1"},
+            "profitability": {"value": "unknown", "confidence": "unknown", "sources": [], "_claim_id": "p1"},
+        }
+        edgar = {
+            "edgar_lookup_status": "succeeded",
+            "revenue": {"value": "$100B", "confidence": "high", "sources": []},
+            "profitability": {"value": "Net income: $20B", "confidence": "high", "sources": []},
+        }
+        result = _edgar_overlay_financial_dict(fin, edgar)
+        assert result["revenue"]["value"] == "$100B"
+        assert result["revenue"]["_claim_id"] == "r1"
+        assert result["profitability"]["value"] == "Net income: $20B"
+        assert result["profitability"]["_claim_id"] == "p1"
+
+    def test_non_edgar_fields_untouched(self):
+        fin = {
+            "company_name": "TestCo",
+            "revenue": {"value": "unknown", "confidence": "unknown", "sources": []},
+            "total_funding": {"value": "$500M", "confidence": "high", "sources": []},
+        }
+        result = _edgar_overlay_financial_dict(fin, self._edgar())
+        assert result["total_funding"]["value"] == "$500M"
+
+    def test_not_applied_when_status_not_succeeded(self):
+        fin = self._fin()
+        edgar = self._edgar(status="not_sec_reporting")
+        result = _edgar_overlay_financial_dict(fin, edgar)
+        assert result is fin
+
+    def test_not_applied_when_edgar_none(self):
+        fin = self._fin()
+        result = _edgar_overlay_financial_dict(fin, None)
+        assert result is fin
+
+    def test_not_applied_when_financial_none(self):
+        edgar = self._edgar()
+        result = _edgar_overlay_financial_dict(None, edgar)
+        assert result is None
+
+    def test_edgar_unknown_confidence_not_overlaid(self):
+        fin = self._fin(claim_id="abc")
+        edgar = {"edgar_lookup_status": "succeeded", "revenue": {"value": "unknown", "confidence": "unknown"}}
+        result = _edgar_overlay_financial_dict(fin, edgar)
+        assert result["revenue"]["value"] == "unknown"
+        assert result["revenue"]["confidence"] == "unknown"
+
+    def test_does_not_mutate_original_dict(self):
+        fin = self._fin(rev_value="unknown", rev_conf="unknown", claim_id="abc")
+        edgar = self._edgar()
+        result = _edgar_overlay_financial_dict(fin, edgar)
+        assert result is not fin
+        assert fin["revenue"]["value"] == "unknown"  # original unchanged
+
+    def test_no_claim_id_on_original_still_works(self):
+        """Works cleanly when the original DataPoint has no _claim_id yet."""
+        fin = {"revenue": {"value": "unknown", "confidence": "unknown"}}
+        edgar = {"edgar_lookup_status": "succeeded", "revenue": {"value": "$100B", "confidence": "high"}}
+        result = _edgar_overlay_financial_dict(fin, edgar)
+        assert result["revenue"]["value"] == "$100B"
+        assert "_claim_id" not in result["revenue"]
+
+
+# ── build_synthesis_task EDGAR overlay integration Tests ─────────────
+
+class TestBuildSynthesisTaskEdgarOverlay:
+    def _financial_data(self):
+        return {
+            "company_name": "TestCo",
+            "revenue": {
+                "value": "unknown", "confidence": "unknown",
+                "sources": [], "reasoning": "Deferred to EDGAR.",
+                "_claim_id": "fin_rev_001",
+            },
+        }
+
+    def _edgar_succeeded(self):
+        return {
+            "edgar_lookup_status": "succeeded",
+            "cik": "0001234567",
+            "most_recent_filing": {"value": "10-K 2025", "confidence": "high", "sources": []},
+            "revenue": {"value": "$391.04B", "confidence": "high", "sources": ["https://data.sec.gov/x"]},
+            "sec_risk_factors": [],
+        }
+
+    def test_financial_section_shows_edgar_revenue(self):
+        """Synthesis sees merged revenue, not the pre-merge unknown placeholder."""
+        task = build_synthesis_task(
+            "TestCo", None, self._financial_data(), None, None,
+            edgar_data=self._edgar_succeeded(),
+        )
+        fin_start = task.find("== FINANCIAL AGENT ==")
+        risk_start = task.find("== RISK AGENT ==")
+        financial_section = task[fin_start:risk_start]
+        assert "$391.04B" in financial_section
+
+    def test_financial_section_unchanged_without_edgar(self):
+        """When no edgar_data, financial section shows original values."""
+        task = build_synthesis_task(
+            "TestCo", None, self._financial_data(), None, None,
+            edgar_data=None,
+        )
+        fin_start = task.find("== FINANCIAL AGENT ==")
+        risk_start = task.find("== RISK AGENT ==")
+        financial_section = task[fin_start:risk_start]
+        assert "Deferred to EDGAR" in financial_section
+
+    def test_financial_section_unchanged_when_edgar_not_succeeded(self):
+        """When EDGAR did not succeed, financial section shows original values."""
+        edgar_not_sec = {"edgar_lookup_status": "not_sec_reporting"}
+        task = build_synthesis_task(
+            "TestCo", None, self._financial_data(), None, None,
+            edgar_data=edgar_not_sec,
+        )
+        fin_start = task.find("== FINANCIAL AGENT ==")
+        risk_start = task.find("== RISK AGENT ==")
+        financial_section = task[fin_start:risk_start]
+        assert "Deferred to EDGAR" in financial_section
+        assert "$391.04B" not in financial_section
+
+    def test_original_financial_data_not_mutated(self):
+        """build_synthesis_task must not mutate the financial_data it receives."""
+        fin = self._financial_data()
+        _ = build_synthesis_task(
+            "TestCo", None, fin, None, None,
+            edgar_data=self._edgar_succeeded(),
+        )
+        assert fin["revenue"]["value"] == "unknown"

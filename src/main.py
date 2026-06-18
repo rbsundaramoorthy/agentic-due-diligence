@@ -147,6 +147,9 @@ async def run_due_diligence(company_name: str, json_only: bool = False) -> Agent
     financial_data = annotate_claim_ids(financial_data)
     risk_data = annotate_claim_ids(risk_data)
     social_media_data = annotate_claim_ids(social_media_data)
+    # EDGAR: also annotate so sec_risk_factors and revenue/profitability DataPoints
+    # carry stable _claim_ids that synthesis can cite and the assembler will honour.
+    edgar_data = annotate_claim_ids(edgar_data)
 
     # ── Phase 2: Synthesis ───────────────────────────────────────
     console.print()

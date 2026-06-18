@@ -18,6 +18,9 @@ from src.synthesis.assembler import (
     _assemble_financial,
     _assemble_risk,
     _dp_to_claim,
+    _pre_assembly_citable_ids,
+    _validate_synthesis_before_assembly,
+    SPECIFIC_SYNTHESIS_FIELDS,
 )
 
 
@@ -1668,3 +1671,299 @@ def test_apple_overall_confidence_lower_than_precap():
         f"overall_confidence {stored} exceeds pre-cap baseline of 92.42 — "
         "caps must only lower confidence, never raise it."
     )
+
+
+# ── Pre-assembly provenance validation ────────────────────────────────────────
+
+
+def _annotated_research():
+    """research_data annotated with stable _claim_ids."""
+    return annotate_claim_ids(_research_data())
+
+
+def _synthesis_with(specific_field: str, synthesized_from: list, **extra) -> dict:
+    """Minimal synthesis dict with a single item in a SPECIFIC field."""
+    base = {
+        "company_name": "TestCo",
+        "executive_summary": {
+            "value": "Summary.", "confidence": "high",
+            "sources": [], "synthesized_from": [], "reasoning": "Summary.",
+        },
+        "investment_recommendation": {
+            "value": "proceed", "confidence": "medium",
+            "sources": [], "synthesized_from": [], "reasoning": "Reason.",
+        },
+        "recommendation_rationale": {
+            "value": "Rationale.", "confidence": "medium",
+            "sources": [], "synthesized_from": [], "reasoning": "Based on overall evidence.",
+        },
+        "key_strengths": [],
+        "key_concerns": [],
+        "red_flags": [],
+        "data_conflicts": [],
+        "follow_up_questions": [],
+        "data_quality": {
+            "value": "medium", "confidence": "medium",
+            "sources": [], "synthesized_from": [], "reasoning": "OK.",
+        },
+    }
+    base[specific_field] = [{
+        "value": "Test claim.",
+        "confidence": "high",
+        "sources": [],
+        "synthesized_from": synthesized_from,
+        "reasoning": extra.get("reasoning"),
+    }]
+    return base
+
+
+class TestPreAssemblyCitableIds:
+    def test_non_gap_datapoints_included(self):
+        data = _annotated_research()
+        citable = _pre_assembly_citable_ids(data, None, None, None, None)
+        assert data["description"]["_claim_id"] in citable
+
+    def test_gap_datapoints_excluded(self):
+        """DataPoints with value=unknown AND confidence=unknown are excluded."""
+        data = annotate_claim_ids(_research_data(
+            founded_year={"value": "unknown", "confidence": "unknown", "sources": []}
+        ))
+        citable = _pre_assembly_citable_ids(data, None, None, None, None)
+        assert data["founded_year"]["_claim_id"] not in citable
+
+    def test_list_non_gap_included(self):
+        data = _annotated_research()
+        product_id = data["key_products"][0]["_claim_id"]
+        citable = _pre_assembly_citable_ids(data, None, None, None, None)
+        assert product_id in citable
+
+    def test_edgar_revenue_included_when_succeeded(self):
+        edgar = annotate_claim_ids({
+            "edgar_lookup_status": "succeeded",
+            "cik": "0000320193",
+            "revenue": {"value": "$416B", "confidence": "high", "sources": []},
+            "profitability": {"value": "unknown", "confidence": "unknown", "sources": []},
+            "sec_risk_factors": [],
+        })
+        citable = _pre_assembly_citable_ids(None, None, None, None, edgar)
+        assert edgar["revenue"]["_claim_id"] in citable
+
+    def test_edgar_profitability_excluded_when_unknown_confidence(self):
+        edgar = annotate_claim_ids({
+            "edgar_lookup_status": "succeeded",
+            "cik": "0000320193",
+            "revenue": {"value": "$416B", "confidence": "high", "sources": []},
+            "profitability": {"value": "unknown", "confidence": "unknown", "sources": []},
+            "sec_risk_factors": [],
+        })
+        citable = _pre_assembly_citable_ids(None, None, None, None, edgar)
+        assert edgar["profitability"]["_claim_id"] not in citable
+
+    def test_edgar_sec_risk_factors_included(self):
+        edgar = annotate_claim_ids({
+            "edgar_lookup_status": "succeeded",
+            "cik": "0000320193",
+            "revenue": {"value": "unknown", "confidence": "unknown", "sources": []},
+            "sec_risk_factors": [
+                {"value": "Competition risk.", "confidence": "high", "sources": []},
+                {"value": "Regulatory risk.", "confidence": "high", "sources": []},
+            ],
+        })
+        citable = _pre_assembly_citable_ids(None, None, None, None, edgar)
+        for dp in edgar["sec_risk_factors"]:
+            assert dp["_claim_id"] in citable
+
+    def test_edgar_not_sec_reporting_excluded(self):
+        edgar = annotate_claim_ids({
+            "edgar_lookup_status": "not_sec_reporting",
+            "cik": None,
+            "revenue": {"value": "$5B", "confidence": "high", "sources": []},
+            "sec_risk_factors": [],
+        })
+        citable = _pre_assembly_citable_ids(None, None, None, None, edgar)
+        # Revenue not included — edgar_lookup_status != "succeeded"
+        assert edgar["revenue"]["_claim_id"] not in citable
+
+    def test_none_data_is_safe(self):
+        citable = _pre_assembly_citable_ids(None, None, None, None, None)
+        assert citable == set()
+
+
+class TestValidateSynthesisBeforeAssembly:
+    def test_valid_refs_preserved(self):
+        data = _annotated_research()
+        valid_id = data["description"]["_claim_id"]
+        synthesis = _synthesis_with("key_strengths", [valid_id])
+        citable = {valid_id}
+        result = _validate_synthesis_before_assembly(synthesis, citable)
+        assert result["key_strengths"][0]["synthesized_from"] == [valid_id]
+
+    def test_invalid_ref_stripped_drops_specific_field(self):
+        """Specific field with only invalid refs → claim dropped, not kept with empty list."""
+        synthesis = _synthesis_with("key_strengths", ["edgar_lookup_status", "nonexistent"])
+        result = _validate_synthesis_before_assembly(synthesis, citable_ids=set())
+        assert result["key_strengths"] == []
+
+    def test_specific_field_all_stripped_is_dropped(self):
+        """Specific field with all refs stripped → claim dropped from list."""
+        synthesis = _synthesis_with("key_strengths", ["invalid_id"])
+        result = _validate_synthesis_before_assembly(synthesis, citable_ids=set())
+        # Claim is dropped because no valid refs remain (Pydantic invariant enforcement)
+        assert result["key_strengths"] == []
+
+    def test_specific_field_empty_from_start_is_dropped(self):
+        """Specific field with no synthesized_from at all → dropped (empty = unsupported)."""
+        synthesis = _synthesis_with("red_flags", [])
+        result = _validate_synthesis_before_assembly(synthesis, citable_ids=set())
+        assert result["red_flags"] == []
+
+    def test_specific_field_one_valid_one_invalid_keeps_valid(self):
+        data = _annotated_research()
+        valid_id = data["description"]["_claim_id"]
+        synthesis = _synthesis_with("key_concerns", [valid_id, "bad_id"])
+        result = _validate_synthesis_before_assembly(synthesis, {valid_id})
+        item = result["key_concerns"][0]
+        assert item["synthesized_from"] == [valid_id]
+        # valid ref remains → NOT flagged as unsupported
+        assert item.get("confidence") == "high"
+
+    def test_follow_up_questions_not_flagged(self):
+        """follow_up_questions are exempt from the specific-field invariant."""
+        synthesis = {
+            "company_name": "TestCo",
+            "executive_summary": {
+                "value": "S.", "confidence": "high", "sources": [],
+                "synthesized_from": [], "reasoning": "S.",
+            },
+            "investment_recommendation": {
+                "value": "proceed", "confidence": "medium", "sources": [],
+                "synthesized_from": [], "reasoning": "R.",
+            },
+            "recommendation_rationale": {
+                "value": "Rat.", "confidence": "medium", "sources": [],
+                "synthesized_from": [], "reasoning": None,
+            },
+            "key_strengths": [], "key_concerns": [], "red_flags": [],
+            "data_conflicts": [],
+            "follow_up_questions": [{
+                "value": "What is the ARR?",
+                "confidence": "medium",
+                "sources": [],
+                "synthesized_from": ["bad_id"],  # invalid ref
+                "reasoning": "Private company — no public ARR data.",
+            }],
+            "data_quality": {
+                "value": "medium", "confidence": "medium",
+                "sources": [], "synthesized_from": [], "reasoning": "OK.",
+            },
+        }
+        result = _validate_synthesis_before_assembly(synthesis, citable_ids=set())
+        fq = result["follow_up_questions"][0]
+        # ref stripped but NOT flagged as unsupported (follow_up_questions exempt)
+        assert fq["synthesized_from"] == []
+        assert fq["confidence"] == "medium"  # unchanged
+        assert "unsupported" not in (fq.get("reasoning") or "")
+
+    def test_none_synthesis_is_safe(self):
+        assert _validate_synthesis_before_assembly(None, set()) is None
+
+    def test_does_not_mutate_original(self):
+        synthesis = _synthesis_with("key_strengths", ["bad_id"])
+        import copy
+        original = copy.deepcopy(synthesis)
+        _validate_synthesis_before_assembly(synthesis, citable_ids=set())
+        assert synthesis["key_strengths"][0]["synthesized_from"] == ["bad_id"]
+
+    def test_invariant_via_assemble_report_no_specific_field_empty_after_strip(self):
+        """Integration: specific-field claim with only fake synthesized_from is dropped.
+
+        Synthesis cites a fake ID for a key_strength. The pre-assembly validator strips
+        the ref and drops the claim (no valid refs → no Claim). The assembled document
+        has an empty key_strengths list — the invariant is satisfied by absence.
+        """
+        research = _annotated_research()
+        synthesis = _synthesis_with("key_strengths", ["totally_fake_id_xyz"])
+        doc = assemble_report(research, None, None, None, synthesis, _trace_summary())
+        assert doc.synthesis is not None
+        # Claim was dropped — key_strengths is empty, not a claim with empty synthesized_from
+        assert doc.synthesis.key_strengths == []
+
+    def test_invariant_valid_id_resolves_end_to_end(self):
+        """Integration: a key_strength citing a real upstream ID survives assembly intact."""
+        research = annotate_claim_ids(_research_data(
+            description={"value": "Payment processing", "confidence": "high",
+                         "sources": ["https://data.sec.gov/filing"]},  # primary → Cap 1a won't fire
+        ))
+        valid_id = research["description"]["_claim_id"]
+        synthesis = _synthesis_with("key_strengths", [valid_id])
+        doc = assemble_report(research, None, None, None, synthesis, _trace_summary())
+        strength = doc.synthesis.key_strengths[0]
+        assert valid_id in strength.synthesized_from
+        assert strength.confidence.value == "high"  # original confidence preserved
+
+    def test_edgar_claim_id_resolves_via_citable_set(self):
+        """Integration: synthesis citing edgar revenue _claim_id survives pre-assembly."""
+        edgar = annotate_claim_ids({
+            "edgar_lookup_status": "succeeded",
+            "cik": "0000320193",
+            "revenue": {"value": "$416B", "confidence": "high",
+                        "sources": ["https://data.sec.gov/companyfacts"]},
+            "profitability": {"value": "unknown", "confidence": "unknown", "sources": []},
+            "sec_risk_factors": [],
+        })
+        edgar_rev_id = edgar["revenue"]["_claim_id"]
+
+        # financial_data for the financial agent (gap — edgar provides the real value)
+        financial = {
+            "company_name": "Apple",
+            "revenue": {"value": "unknown", "confidence": "unknown", "sources": []},
+            "profitability": {"value": "unknown", "confidence": "unknown", "sources": []},
+            "total_funding": {"value": "unknown", "confidence": "unknown", "sources": []},
+            "last_funding_round": {"value": "unknown", "confidence": "unknown", "sources": []},
+            "valuation": {"value": "unknown", "confidence": "unknown", "sources": []},
+            "revenue_model": {"value": "unknown", "confidence": "unknown", "sources": []},
+            "revenue_growth": {"value": "unknown", "confidence": "unknown", "sources": []},
+            "key_investors": [], "key_customers": [], "financial_risks": [],
+            "recent_financial_events": [],
+        }
+        financial = annotate_claim_ids(financial)
+
+        synthesis = {
+            "company_name": "Apple",
+            "executive_summary": {
+                "value": "Apple is a large public company.",
+                "confidence": "high", "sources": [], "synthesized_from": [], "reasoning": "S.",
+            },
+            "investment_recommendation": {
+                "value": "proceed", "confidence": "high",
+                "sources": [], "synthesized_from": [], "reasoning": "R.",
+            },
+            "recommendation_rationale": {
+                "value": "Strong fundamentals.", "confidence": "high",
+                "sources": [], "synthesized_from": [], "reasoning": "Large profitable company with primary-source evidence.",
+            },
+            "key_strengths": [{
+                "value": "Revenue exceeds $416B from EDGAR.",
+                "confidence": "high", "sources": [],
+                "synthesized_from": [edgar_rev_id],  # cites EDGAR revenue _claim_id
+                "reasoning": None,
+            }],
+            "key_concerns": [], "red_flags": [], "data_conflicts": [],
+            "follow_up_questions": [],
+            "data_quality": {
+                "value": "high", "confidence": "high",
+                "sources": [], "synthesized_from": [], "reasoning": "SEC filing.",
+            },
+        }
+
+        doc = assemble_report(
+            None, financial, None, None, synthesis, _trace_summary(), edgar_data=edgar
+        )
+        assert doc.synthesis is not None
+        strength = doc.synthesis.key_strengths[0]
+        # The edgar revenue _claim_id was in the citable set → preserved, not stripped
+        assert edgar_rev_id in strength.synthesized_from
+        # After EDGAR merge, doc.financial.revenue.claim_id should equal edgar_rev_id
+        assert doc.financial is not None
+        assert doc.financial.revenue is not None
+        assert doc.financial.revenue.claim_id == edgar_rev_id

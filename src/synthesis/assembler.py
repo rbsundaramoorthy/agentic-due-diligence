@@ -1113,6 +1113,133 @@ def _validate_derived_from(doc: "ReportDocument") -> None:
                         )
 
 
+# ── Pre-assembly provenance validation ───────────────────────────────────────
+
+def _pre_assembly_citable_ids(
+    research_data: Optional[dict],
+    financial_data: Optional[dict],
+    risk_data: Optional[dict],
+    social_media_data: Optional[dict],
+    edgar_data: Optional[dict],
+) -> set:
+    """Compute the set of _claim_ids that will survive assembly as Claims.
+
+    Only non-gap DataPoints (value != 'unknown' OR confidence != 'unknown')
+    with a pre-assigned _claim_id are included. For EDGAR, only the DataPoints
+    that _merge_edgar and _merge_edgar_into_risk will place in the assembled
+    document are included (revenue, profitability, sec_risk_factors).
+
+    This is called before _assemble_synthesis so that _validate_synthesis_before_assembly
+    can strip references that will definitely dangle — without waiting for the full
+    assembly to complete. _validate_synthesized_from remains as a post-assembly backstop.
+    """
+    citable: set = set()
+
+    def _collect(data: Optional[dict]) -> None:
+        if not data:
+            return
+        for key, val in data.items():
+            if key == "company_name":
+                continue
+            if isinstance(val, dict) and "value" in val and "confidence" in val:
+                if not (val.get("value") == "unknown" and val.get("confidence") == "unknown"):
+                    cid = val.get("_claim_id")
+                    if cid:
+                        citable.add(cid)
+            elif isinstance(val, list):
+                for item in val:
+                    if isinstance(item, dict) and "value" in item and "confidence" in item:
+                        if not (item.get("value") == "unknown" and item.get("confidence") == "unknown"):
+                            cid = item.get("_claim_id")
+                            if cid:
+                                citable.add(cid)
+
+    _collect(research_data)
+    _collect(financial_data)
+    _collect(risk_data)
+    _collect(social_media_data)
+
+    # EDGAR: mirror the guards used by _merge_edgar and _merge_edgar_into_risk.
+    if edgar_data and edgar_data.get("edgar_lookup_status") == "succeeded":
+        for field in ("revenue", "profitability"):
+            dp = edgar_data.get(field)
+            if dp and isinstance(dp, dict) and "_claim_id" in dp:
+                if dp.get("confidence") not in (None, "unknown"):
+                    citable.add(dp["_claim_id"])
+        for dp in (edgar_data.get("sec_risk_factors") or []):
+            if isinstance(dp, dict) and "_claim_id" in dp:
+                if not (dp.get("value") == "unknown" and dp.get("confidence") == "unknown"):
+                    citable.add(dp["_claim_id"])
+
+    return citable
+
+
+def _validate_synthesis_before_assembly(
+    synthesis_data: Optional[dict],
+    citable_ids: set,
+) -> Optional[dict]:
+    """Strip out-of-set synthesized_from references before assembly.
+
+    Modifies a deep copy of synthesis_data:
+    - Any synthesized_from ID not in citable_ids is removed with a stderr warning.
+    - For SPECIFIC fields (key_strengths, key_concerns, red_flags, data_conflicts)
+      left with empty synthesized_from after stripping: the claim is DROPPED from its
+      list. Keeping a specific claim with empty synthesized_from would violate the
+      Pydantic Claim invariant and the pipeline's provenance contract.
+    - For GENERAL fields (scalar DataPoints, follow_up_questions): refs are stripped
+      but the claim is kept — reasoning alone satisfies the GENERAL field requirement.
+
+    _validate_synthesized_from (post-assembly) remains as a backstop for any IDs
+    that slip through or are resolved only after EDGAR merges.
+    """
+    if not synthesis_data:
+        return synthesis_data
+
+    result = copy.deepcopy(synthesis_data)
+
+    def _strip_refs(dp: dict, field_path: str) -> dict:
+        """Strip uncitable refs; return the modified dict."""
+        refs = dp.get("synthesized_from") or []
+        valid = [r for r in refs if r in citable_ids]
+        invalid = [r for r in refs if r not in citable_ids]
+        if invalid:
+            print(
+                f"[assembler] pre-assembly: stripped {len(invalid)} uncitable "
+                f"synthesized_from ref(s) from '{field_path}': {invalid}",
+                file=sys.stderr,
+            )
+        dp["synthesized_from"] = valid
+        return dp
+
+    for key, val in result.items():
+        if key == "company_name":
+            continue
+        if isinstance(val, dict) and "synthesized_from" in val:
+            result[key] = _strip_refs(val, key)
+        elif isinstance(val, list):
+            new_list = []
+            for i, item in enumerate(val):
+                if isinstance(item, dict) and "synthesized_from" in item:
+                    field_path = f"{key}[{i}]"
+                    item = _strip_refs(item, field_path)
+                    if key in SPECIFIC_SYNTHESIS_FIELDS and not item.get("synthesized_from"):
+                        # Specific claims with no resolvable upstream evidence are dropped
+                        # rather than kept with empty synthesized_from — the Pydantic Claim
+                        # model enforces that specific fields must have non-empty provenance.
+                        print(
+                            f"[assembler] pre-assembly: dropping specific synthesis claim "
+                            f"'{field_path}' — no resolvable upstream evidence after stripping.",
+                            file=sys.stderr,
+                        )
+                        continue
+                    new_list.append(item)
+                else:
+                    new_list.append(item)
+            result[key] = new_list
+
+    return result
+
+
 # ── Public API ────────────────────────────────────────────────────────────────
 
 def assemble_report(
@@ -1146,6 +1273,16 @@ def assemble_report(
         (social_media_data, "social_media"),
     ):
         gaps.extend(_collect_gaps(data, agent_name))
+
+    # Pre-assembly provenance validation: strip synthesized_from references that
+    # point to IDs which will not exist as Claims in the assembled document.
+    # Must run BEFORE _assemble_synthesis so Claim objects are built with clean
+    # synthesized_from lists. _validate_synthesized_from (post-assembly) is still
+    # called as a backstop for IDs that only resolve after EDGAR merges.
+    citable_ids = _pre_assembly_citable_ids(
+        research_data, financial_data, risk_data, social_media_data, edgar_data
+    )
+    synthesis_data = _validate_synthesis_before_assembly(synthesis_data, citable_ids)
 
     # Assemble sections, then apply EDGAR overlays before tier coverage
     research = _assemble_research(research_data)

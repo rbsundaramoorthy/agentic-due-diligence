@@ -326,27 +326,42 @@ class TestEdgarOverlayFinancialDict:
         assert result["revenue"]["value"] == "$100B"
         assert result["revenue"]["confidence"] == "high"
 
-    def test_preserves_original_claim_id(self):
+    def test_uses_edgar_claim_id_when_annotated(self):
+        """edgar_data must be annotated before calling this function so the overlay
+        carries the EDGAR DataPoint's own _claim_id (not the financial agent's)."""
+        from src.synthesis.assembler import annotate_claim_ids
+        fin = self._fin(claim_id="fin_abc123")
+        edgar = annotate_claim_ids(self._edgar())  # annotate edgar so it has _claim_id
+        result = _edgar_overlay_financial_dict(fin, edgar)
+        # Overlay uses edgar's own _claim_id, NOT the financial agent's "fin_abc123"
+        assert result["revenue"]["_claim_id"] == edgar["revenue"]["_claim_id"]
+        assert result["revenue"]["_claim_id"] != "fin_abc123"
+
+    def test_no_claim_id_when_edgar_not_annotated(self):
+        """When edgar_data has no _claim_id (not annotated), overlay also lacks it."""
         fin = self._fin(claim_id="abc123")
-        result = _edgar_overlay_financial_dict(fin, self._edgar())
-        assert result["revenue"]["_claim_id"] == "abc123"
+        edgar = self._edgar()  # NOT annotated → no _claim_id on revenue
+        result = _edgar_overlay_financial_dict(fin, edgar)
+        assert result["revenue"]["value"] == "$100B"
+        assert "_claim_id" not in result["revenue"]
 
     def test_overlays_profitability_when_present(self):
+        from src.synthesis.assembler import annotate_claim_ids
         fin = {
             "company_name": "TestCo",
             "revenue": {"value": "unknown", "confidence": "unknown", "sources": [], "_claim_id": "r1"},
             "profitability": {"value": "unknown", "confidence": "unknown", "sources": [], "_claim_id": "p1"},
         }
-        edgar = {
+        edgar = annotate_claim_ids({
             "edgar_lookup_status": "succeeded",
             "revenue": {"value": "$100B", "confidence": "high", "sources": []},
             "profitability": {"value": "Net income: $20B", "confidence": "high", "sources": []},
-        }
+        })
         result = _edgar_overlay_financial_dict(fin, edgar)
         assert result["revenue"]["value"] == "$100B"
-        assert result["revenue"]["_claim_id"] == "r1"
+        assert result["revenue"]["_claim_id"] == edgar["revenue"]["_claim_id"]  # edgar's own ID
         assert result["profitability"]["value"] == "Net income: $20B"
-        assert result["profitability"]["_claim_id"] == "p1"
+        assert result["profitability"]["_claim_id"] == edgar["profitability"]["_claim_id"]
 
     def test_non_edgar_fields_untouched(self):
         fin = {

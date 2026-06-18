@@ -11,6 +11,54 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Fix dangling synthesized_from provenance in synthesis claims (2026-06-18):**
+  Synthesis claims for specific fields (key_strengths, key_concerns, red_flags,
+  data_conflicts) were ending up with empty or dangling `synthesized_from` after
+  assembly, failing the pipeline's provenance invariant.
+
+  Three root causes and fixes:
+
+  1. **EDGAR not annotated → EDGAR DataPoints had no stable `_claim_id`.**
+     `edgar_data` is now run through `annotate_claim_ids` in `main.py` alongside
+     the other agents. EDGAR's revenue, profitability, and sec_risk_factors
+     DataPoints now carry stable IDs end-to-end.
+
+  2. **EDGAR overlay used financial agent's (gap) `_claim_id`.**
+     `_edgar_overlay_financial_dict` was copying the financial agent's `_claim_id`
+     onto the EDGAR DataPoint. The financial agent's DataPoint is a gap
+     (unknown/unknown) and does NOT become a Claim in the assembled document —
+     so synthesis citing it was always dangling. Fix: the overlay now uses the
+     EDGAR DataPoint's own annotated `_claim_id`, which IS the one placed into
+     the assembled `doc.financial.revenue` (via `_merge_edgar`). The provenance
+     chain is now stable end-to-end with no dangling references.
+
+  3. **EDGAR sec_risk_factors not visible as citable claims in the synthesis task.**
+     `_format_edgar_summary` showed only `sec_risk_factors: N found (count)`.
+     Synthesis had no `_claim_id` values to cite and resorted to paraphrases
+     like "sec_risk_factors extracted". Fix: the EDGAR section now lists each
+     sec_risk_factor DataPoint with its `_claim_id` (block titled "SEC RISK
+     FACTORS — cite these _claim_ids in synthesized_from…").
+
+  **Pre-assembly validator** (`_validate_synthesis_before_assembly` in assembler):
+  A new pre-assembly pass computes the citable set — the set of `_claim_id` values
+  that WILL survive as Claims in the assembled document (non-gap DataPoints with
+  annotated IDs, plus EDGAR claims that will be merged) — and strips any
+  `synthesized_from` reference not in that set before `_assemble_synthesis` runs.
+  For specific-field claims (key_strengths, key_concerns, red_flags, data_conflicts)
+  left with no valid references, the claim is DROPPED (not kept with empty
+  synthesized_from — the Pydantic Claim model enforces that specific fields must
+  have non-empty provenance). The existing `_validate_synthesized_from` (post-
+  assembly) remains as a backstop.
+
+  **Synthesis prompt hardening** (`PROMPT_VERSION "2.4"` for SynthesisAgent):
+  System prompt and task prompt both now explicitly list what must NOT appear in
+  `synthesized_from`: metadata field names (edgar_lookup_status, most_recent_filing,
+  cik), agent-output field names (e.g. "overall_sentiment"), and paraphrases.
+
+  Tests: `TestPreAssemblyCitableIds` (8 cases) and
+  `TestValidateSynthesisBeforeAssembly` (11 cases, including 3 integration tests
+  that run the full assembler pipeline) in `tests/test_assembler.py`.
+
 - **Synthesis reconciliation with EDGAR-merged financials (2026-06-17):**
   Synthesis now evaluates `data_quality` and `data_conflicts` against the
   EDGAR-merged financial state, not the pre-merge deferrals.

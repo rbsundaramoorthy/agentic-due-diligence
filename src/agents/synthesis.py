@@ -29,11 +29,11 @@ def _edgar_overlay_financial_dict(
     edgar_lookup_status == "succeeded" and the EDGAR DataPoint has non-unknown
     confidence — mirrors the guard logic in the assembler's _merge_edgar.
 
-    The original financial_data dict is never mutated. The _claim_id from the
-    original DataPoint is preserved so synthesis can reference it in synthesized_from;
-    the assembler will replace those claims with EDGAR's own Claim objects (new
-    claim_ids), and any dangling synthesized_from refs are stripped by
-    _validate_synthesized_from with a warning.
+    The original financial_data dict is never mutated. edgar_data must be
+    annotated (via annotate_claim_ids) before this call so that EDGAR DataPoints
+    carry stable _claim_ids. Synthesis cites those IDs in synthesized_from; the
+    assembler's _merge_edgar honours the same IDs when building Claim objects, so
+    the provenance chain is stable end-to-end with no dangling references.
     """
     if not financial_data or not edgar_data:
         return financial_data
@@ -43,12 +43,10 @@ def _edgar_overlay_financial_dict(
     for field in ("revenue", "profitability"):
         dp = edgar_data.get(field)
         if dp and dp.get("confidence") not in (None, "unknown"):
-            merged_dp = dict(dp)  # shallow copy of edgar DataPoint
-            original = financial_data.get(field) or {}
-            if "_claim_id" in original:
-                # Carry forward the pre-assigned ID so synthesis can cite it.
-                merged_dp["_claim_id"] = original["_claim_id"]
-            result[field] = merged_dp
+            # Use the EDGAR DataPoint as-is (including its pre-assigned _claim_id).
+            # Do NOT copy the financial agent's _claim_id — the financial agent's
+            # DataPoint is a gap (unknown/unknown) and will not become a Claim.
+            result[field] = dict(dp)  # shallow copy of edgar DataPoint
     return result
 
 
@@ -136,7 +134,6 @@ def build_synthesis_task(
         cik = data.get("cik", "unknown")
         mrf_dp = data.get("most_recent_filing") or {}
         mrf_val = mrf_dp.get("value", "unknown") if isinstance(mrf_dp, dict) else "unknown"
-        n_rf = len(data.get("sec_risk_factors") or [])
         filing_note = ""
         mrf_lower = mrf_val.lower()
         if "424b" in mrf_lower or "s-1" in mrf_lower:
@@ -150,12 +147,42 @@ def build_synthesis_task(
                 "\nIMPORTANT: A 10-K filing means the company is an established public "
                 "company filing annual reports with the SEC. Treat as PUBLIC."
             )
+
+        # Expose sec_risk_factors with their _claim_ids so synthesis can cite them.
+        # These DataPoints are assembled into the risk section by the assembler,
+        # so their _claim_ids will resolve in the final document.
+        sec_factors = data.get("sec_risk_factors") or []
+        citable_factors = [
+            dp for dp in sec_factors
+            if isinstance(dp, dict)
+            and "_claim_id" in dp
+            and not (dp.get("value") == "unknown" and dp.get("confidence") == "unknown")
+        ]
+        if citable_factors:
+            rf_lines = []
+            for dp in citable_factors:
+                cid = dp["_claim_id"]
+                val_snippet = str(dp.get("value", ""))[:120]
+                rf_lines.append(f'  [{cid}] "{val_snippet}"')
+            rf_block = (
+                "\n\nSEC RISK FACTORS — cite these _claim_ids in synthesized_from "
+                "when referencing EDGAR risk disclosures:\n" + "\n".join(rf_lines)
+            )
+        elif sec_factors:
+            rf_block = f"\n\nsec_risk_factors: {len(sec_factors)} found (no annotated _claim_ids)"
+        else:
+            rf_block = "\n\nsec_risk_factors: none extracted"
+
         return (
-            f"edgar_lookup_status: {status}\n"
-            f"CIK: {cik}\n"
-            f"most_recent_filing: {mrf_val}\n"
-            f"sec_risk_factors extracted: {n_rf}"
+            "METADATA — context only, NOT citable in synthesized_from:\n"
+            f"  edgar_lookup_status: {status}\n"
+            f"  CIK: {cik}\n"
+            f"  most_recent_filing: {mrf_val} [use reasoning to reference the filing type; do NOT cite this in synthesized_from]"
             f"{filing_note}"
+            f"{rf_block}"
+            "\n\nNOTE: EDGAR financial claims (revenue, profitability) appear in the "
+            "FINANCIAL AGENT section below with their _claim_ids — cite those IDs, "
+            "not 'edgar_lookup_status' or 'most_recent_filing'."
         )
 
     edgar_section = f"""
@@ -199,12 +226,22 @@ BEFORE YOU WRITE YOUR RESPONSE — three checks:
    the claim if you cannot cite one. GENERAL fields (executive_summary,
    recommendation, recommendation_rationale, follow_up_questions,
    data_quality) require synthesized_from OR non-empty reasoning.
+
+   NEVER put any of these in synthesized_from:
+   • Metadata: edgar_lookup_status, most_recent_filing, cik, is_sec_reporting
+   • Field names: "overall_sentiment", "revenue", "sec_risk_factors", etc.
+   • Paraphrases: "sec_risk_factors extracted", "EDGAR result", "social media data"
+   • Gap DataPoints (value=unknown, confidence=unknown) — they have no Claim
+   Only valid _claim_id hex values that appear as "_claim_id" fields in the
+   data sections above are permitted. For EDGAR financial claims, the _claim_ids
+   appear in the FINANCIAL AGENT section. For EDGAR risk disclosures, use the
+   _claim_ids listed in the "SEC RISK FACTORS" block in the EDGAR section above.
 """
 
 
 class SynthesisAgent(BaseAgent):
     AGENT_NAME = "synthesis"
-    PROMPT_VERSION = "2.3"
+    PROMPT_VERSION = "2.4"
     MAX_TURNS = 5  # One turn normally; extra budget for parse retries only
 
     def get_tools(self) -> list:
@@ -353,6 +390,21 @@ GENERAL fields — synthesized_from OR non-empty reasoning is required.
   - For data_quality: synthesized_from may be empty — it is a meta-assessment
     of the overall dataset, not derived from a specific claim. reasoning MUST
     explain the assessment.
+
+WHAT IS VALID IN synthesized_from — only these:
+  _claim_id hex values that appear as "_claim_id" fields in the data you received.
+  Look for them in the RESEARCH, FINANCIAL, RISK, SOCIAL MEDIA agent JSON outputs,
+  and in the "SEC RISK FACTORS" block in the EDGAR section.
+
+NEVER PUT THESE IN synthesized_from:
+  • Metadata: edgar_lookup_status, most_recent_filing, cik, is_sec_reporting
+    → these are run context, not evidence; use them in reasoning text only
+  • Field names: "overall_sentiment", "revenue", "sec_risk_factors"
+    → field names are not IDs; the _claim_id is the hex string next to them
+  • Paraphrases: "sec_risk_factors extracted", "EDGAR result", "social data"
+    → these are labels, not identifiers; they will be stripped as dangling refs
+  • IDs of gap DataPoints (value=unknown, confidence=unknown) — they produce
+    no Claim in the assembled document, so the reference will dangle
 
 The synthesized_from chain is what transforms a synthesis claim from an
 assertion into traceable evidence. Without it, a compliance reviewer cannot

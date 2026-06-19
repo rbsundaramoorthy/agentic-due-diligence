@@ -49,7 +49,7 @@ _SYSTEM = (
 
 async def classify_company(
     company_name: str,
-    client: anthropic.Anthropic,
+    client: anthropic.AsyncAnthropic,
     tracer: AgentTracer,
 ) -> Optional[dict]:
     """Pre-classify a company with a single cheap LLM call.
@@ -63,7 +63,7 @@ async def classify_company(
         span_type="llm_call",
     )
     try:
-        response = client.messages.create(
+        response = await client.messages.create(
             model=_MODEL,
             max_tokens=512,
             system=_SYSTEM,

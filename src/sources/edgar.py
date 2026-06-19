@@ -43,7 +43,7 @@ import asyncio
 import json
 import os
 import re
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 
 import httpx
 
@@ -517,6 +517,37 @@ def _extract_most_recent_annual(units_list: list) -> Optional[dict]:
     return annual[0]
 
 
+def _extract_two_most_recent_annual(
+    units_list: list,
+) -> Tuple[Optional[dict], Optional[dict]]:
+    """Return (latest, prior) distinct annual FY observations from an XBRL fact list.
+
+    The same fiscal period often appears in multiple 10-K filings (comparative data
+    re-filed with the subsequent year's 10-K). Deduplicates by period end date,
+    keeping the highest accession number per date (most recently filed, which captures
+    any restatement). Returns (None, None) when no annual data is present; prior is
+    None when only one distinct period exists.
+    """
+    annual = [u for u in units_list if u.get("form") == "10-K" and u.get("fp") == "FY"]
+    if not annual:
+        annual = [u for u in units_list if u.get("form") == "10-K"]
+    if not annual:
+        return None, None
+
+    by_end: dict = {}
+    for u in annual:
+        end = u.get("end", "")
+        existing = by_end.get(end)
+        if existing is None or u.get("accn", "") > existing.get("accn", ""):
+            by_end[end] = u
+
+    distinct = sorted(by_end.values(), key=lambda u: u.get("end", ""), reverse=True)
+    return (
+        distinct[0] if len(distinct) >= 1 else None,
+        distinct[1] if len(distinct) >= 2 else None,
+    )
+
+
 def _fmt_usd(val: int) -> str:
     if val >= 1_000_000_000:
         return f"${val / 1_000_000_000:.2f}B"
@@ -543,7 +574,8 @@ async def edgar_get_financials(
     revenue_key_used, revenue_keys_attempted, accession_no.
     """
     padded = _pad_cik(cik)
-    cache_params = {"op": "companyfacts", "cik": padded}
+    # v2: cache key bumped when prior_revenue/revenue_growth_pct were added to output
+    cache_params = {"op": "companyfacts", "v": "2", "cik": padded}
     if cache:
         hit = cache.get("sec_edgar", cache_params)
         if hit:
@@ -583,26 +615,29 @@ async def edgar_get_financials(
     period_end: Optional[str] = None
     accession_no: Optional[str] = None
     revenue_key_used: Optional[str] = None
+    prior_revenue_val: Optional[int] = None
+    prior_fiscal_year: Optional[str] = None
 
-    # Chain step 1 and 2: standard revenue keys.
-    # Try both keys and pick the one with the MOST RECENT annual observation.
-    # This handles companies that switched XBRL tags (e.g. Apple deprecated
-    # us-gaap.Revenues after FY2018 and uses RevenueFromContract since FY2019).
-    # A "first hit" strategy would return Apple's FY2018 Revenues instead of
-    # the current FY2025 RevenueFromContract data.
+    # Chain steps 1 & 2: standard revenue keys.
+    # Pick the key with the MOST RECENT annual observation (handles companies that
+    # switched XBRL tags, e.g. Apple deprecated us-gaap.Revenues after FY2018).
+    # _extract_two_most_recent_annual also returns the prior-year observation for
+    # YoY growth computation.
     _best_obs: Optional[dict] = None
+    _best_prior_obs: Optional[dict] = None
     _best_key: Optional[str] = None
     for xbrl_key in (
         "Revenues",
         "RevenueFromContractWithCustomerExcludingAssessedTax",
     ):
         facts = us_gaap.get(xbrl_key, {}).get("units", {}).get("USD", [])
-        obs = _extract_most_recent_annual(facts)
-        if obs and (
+        latest, prior = _extract_two_most_recent_annual(facts)
+        if latest and (
             _best_obs is None
-            or obs.get("end", "") > _best_obs.get("end", "")
+            or latest.get("end", "") > _best_obs.get("end", "")
         ):
-            _best_obs = obs
+            _best_obs = latest
+            _best_prior_obs = prior
             _best_key = f"us-gaap.{xbrl_key}"
 
     if _best_obs is not None:
@@ -611,28 +646,45 @@ async def edgar_get_financials(
         period_end = _best_obs.get("end")
         accession_no = _best_obs.get("accn")
         revenue_key_used = _best_key
+        if _best_prior_obs is not None:
+            prior_revenue_val = _best_prior_obs.get("val")
+            # Use end-date year, not fy: comparative data re-filed in a later 10-K
+            # carries the filing year in fy (e.g. FY2024 data in FY2025 10-K has fy=2025).
+            prior_fiscal_year = _best_prior_obs.get("end", "")[:4] or str(
+                _best_prior_obs.get("fy", "")
+            )
 
     # Chain step 3: bank / financial services fallback
     if revenue_val is None:
         interest_facts = us_gaap.get("InterestAndDividendIncomeOperating", {}).get("units", {}).get("USD", [])
         noninterest_facts = us_gaap.get("NoninterestIncome", {}).get("units", {}).get("USD", [])
-        interest_obs = _extract_most_recent_annual(interest_facts)
-        noninterest_obs = _extract_most_recent_annual(noninterest_facts)
+        interest_latest, interest_prior = _extract_two_most_recent_annual(interest_facts)
+        noninterest_latest, noninterest_prior = _extract_two_most_recent_annual(noninterest_facts)
 
-        if interest_obs and noninterest_obs:
-            revenue_val = interest_obs["val"] + noninterest_obs["val"]
-            fiscal_year = str(interest_obs.get("fy") or interest_obs.get("end", "")[:4])
-            period_end = interest_obs.get("end")
-            accession_no = interest_obs.get("accn")
+        if interest_latest and noninterest_latest:
+            revenue_val = interest_latest["val"] + noninterest_latest["val"]
+            fiscal_year = str(interest_latest.get("fy") or interest_latest.get("end", "")[:4])
+            period_end = interest_latest.get("end")
+            accession_no = interest_latest.get("accn")
             revenue_key_used = (
                 "us-gaap.InterestAndDividendIncomeOperating + us-gaap.NoninterestIncome"
             )
-        elif interest_obs:
-            revenue_val = interest_obs["val"]
-            fiscal_year = str(interest_obs.get("fy") or interest_obs.get("end", "")[:4])
-            period_end = interest_obs.get("end")
-            accession_no = interest_obs.get("accn")
+            if interest_prior and noninterest_prior:
+                prior_revenue_val = interest_prior["val"] + noninterest_prior["val"]
+                prior_fiscal_year = interest_prior.get("end", "")[:4] or str(
+                    interest_prior.get("fy", "")
+                )
+        elif interest_latest:
+            revenue_val = interest_latest["val"]
+            fiscal_year = str(interest_latest.get("fy") or interest_latest.get("end", "")[:4])
+            period_end = interest_latest.get("end")
+            accession_no = interest_latest.get("accn")
             revenue_key_used = "us-gaap.InterestAndDividendIncomeOperating"
+            if interest_prior:
+                prior_revenue_val = interest_prior.get("val")
+                prior_fiscal_year = interest_prior.get("end", "")[:4] or str(
+                    interest_prior.get("fy", "")
+                )
 
     # Net income
     net_income_val: Optional[int] = None
@@ -658,6 +710,15 @@ async def edgar_get_financials(
             "period_end": period_end,
             "accession_no": accession_no,
         }
+        if prior_revenue_val is not None and prior_revenue_val != 0:
+            result["prior_revenue"] = {
+                "value_usd": prior_revenue_val,
+                "formatted": _fmt_usd(prior_revenue_val),
+                "fiscal_year": prior_fiscal_year,
+            }
+            result["revenue_growth_pct"] = (
+                (revenue_val - prior_revenue_val) / prior_revenue_val * 100
+            )
     else:
         result["revenue"] = None
         result["revenue_note"] = (

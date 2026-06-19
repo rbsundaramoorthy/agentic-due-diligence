@@ -243,6 +243,7 @@ class SynthesisAgent(BaseAgent):
     AGENT_NAME = "synthesis"
     PROMPT_VERSION = "2.4"
     MAX_TURNS = 5  # One turn normally; extra budget for parse retries only
+    DEFAULT_MAX_TOKENS = 8192  # Synthesis JSON includes synthesized_from hex IDs for all upstream claims
 
     def get_tools(self) -> list:
         return []  # Pure reasoning over collected data — no web search needed

@@ -28,7 +28,7 @@ from pydantic import BaseModel, Field, model_validator
 #   python -c "import json; from src.schemas.models import ReportDocument; \
 #              print(json.dumps(ReportDocument.model_json_schema(), indent=2))" \
 #   > schema/report.schema.json
-SCHEMA_VERSION = "1.0.6"
+SCHEMA_VERSION = "1.0.7"
 
 
 # ── Agent output layer ────────────────────────────────────────────────────────
@@ -184,6 +184,8 @@ class CompanyEdgarFinancials(BaseModel):
     is_sec_reporting: bool = False
     edgar_lookup_status: EdgarLookupStatus = EdgarLookupStatus.NOT_SEC_REPORTING
     revenue: DataPoint = DataPoint(value="unknown", confidence=ConfidenceLevel.UNKNOWN)
+    revenue_prior_year: Optional[DataPoint] = None
+    revenue_growth_pct: Optional[float] = None
     profitability: DataPoint = DataPoint(value="unknown", confidence=ConfidenceLevel.UNKNOWN)
     fiscal_year_end: DataPoint = DataPoint(value="unknown", confidence=ConfidenceLevel.UNKNOWN)
     most_recent_filing: DataPoint = DataPoint(value="unknown", confidence=ConfidenceLevel.UNKNOWN)
@@ -396,6 +398,7 @@ class ReportResearch(BaseModel):
 class ReportFinancial(BaseModel):
     """Financial section of the canonical report."""
     revenue: Optional[Claim] = None
+    revenue_prior_year: Optional[Claim] = None
     revenue_growth: Optional[Claim] = None
     profitability: Optional[Claim] = None
     total_funding: Optional[Claim] = None

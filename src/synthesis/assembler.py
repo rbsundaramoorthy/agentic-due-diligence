@@ -688,11 +688,17 @@ def _merge_edgar(
     financial: Optional[ReportFinancial],
     edgar_data: dict,
 ) -> Optional[ReportFinancial]:
-    """Overlay EDGAR-sourced revenue/profitability onto the financial section.
+    """Overlay EDGAR-sourced revenue/profitability/revenue_growth onto the financial section.
 
     EDGAR values take precedence when edgar_lookup_status == 'succeeded' and
     the DataPoint confidence is not unknown. Financial agent values are kept
     for all other fields (investors, funding, valuation, etc.).
+
+    revenue_growth is computed here (not by the agent) from the two XBRL annual
+    revenue observations. It is emitted only when edgar_data carries both
+    revenue and revenue_prior_year with known confidence, and revenue_growth_pct
+    is a non-None float. The resulting Claim is derived=True with derived_from
+    referencing the two revenue claim_ids (resolvable via _validate_derived_from).
     """
     if financial is None or not edgar_data:
         return financial
@@ -700,12 +706,43 @@ def _merge_edgar(
         return financial
 
     updates: dict = {}
-    for field in ("revenue", "profitability"):
+    for field in ("revenue", "revenue_prior_year", "profitability"):
         dp = edgar_data.get(field)
-        if dp and dp.get("confidence") != "unknown":
+        if dp and dp.get("confidence") not in (None, "unknown"):
             claim = _dp_to_claim(dp, "edgar", field)
             if claim is not None:
                 updates[field] = claim
+
+    # Compute revenue_growth from the two XBRL revenue observations.
+    rev_pct = edgar_data.get("revenue_growth_pct")
+    rev_dp = edgar_data.get("revenue")
+    prior_dp = edgar_data.get("revenue_prior_year")
+    if (
+        rev_pct is not None
+        and rev_dp and rev_dp.get("_claim_id") and rev_dp.get("confidence") not in (None, "unknown")
+        and prior_dp and prior_dp.get("_claim_id") and prior_dp.get("confidence") not in (None, "unknown")
+    ):
+        sign = "+" if rev_pct >= 0 else ""
+        growth_value = (
+            f"{sign}{rev_pct:.1f}% YoY "
+            f"({rev_dp['value']} vs {prior_dp['value']})"
+        )
+        source_urls = [u for u in (rev_dp.get("sources") or []) if _is_url(u)]
+        updates["revenue_growth"] = Claim(
+            claim_id=_new_claim_id(),
+            field_name="revenue_growth",
+            value=growth_value,
+            confidence=ConfidenceLevel.HIGH,
+            sources=[SourceRef(url=u, tier=_infer_tier(u)) for u in source_urls],
+            agent="edgar",
+            reasoning=(
+                "Computed from audited XBRL annual revenue series "
+                f"(same concept, two consecutive fiscal years: {prior_dp['value']} → {rev_dp['value']})"
+            ),
+            derived=True,
+            derived_from=[rev_dp["_claim_id"], prior_dp["_claim_id"]],
+        )
+
     return financial.model_copy(update=updates) if updates else financial
 
 
@@ -888,6 +925,7 @@ def _assemble_financial(data: Optional[dict]) -> Optional[ReportFinancial]:
     fm = _build_field_map(data)
     return ReportFinancial(
         revenue=_dp_to_claim(data.get("revenue"), a, "revenue", fm),
+        revenue_prior_year=_dp_to_claim(data.get("revenue_prior_year"), a, "revenue_prior_year", fm),
         revenue_growth=_dp_to_claim(data.get("revenue_growth"), a, "revenue_growth", fm),
         profitability=_dp_to_claim(data.get("profitability"), a, "profitability", fm),
         total_funding=_dp_to_claim(data.get("total_funding"), a, "total_funding", fm),
@@ -1161,7 +1199,7 @@ def _pre_assembly_citable_ids(
 
     # EDGAR: mirror the guards used by _merge_edgar and _merge_edgar_into_risk.
     if edgar_data and edgar_data.get("edgar_lookup_status") == "succeeded":
-        for field in ("revenue", "profitability"):
+        for field in ("revenue", "revenue_prior_year", "profitability"):
             dp = edgar_data.get(field)
             if dp and isinstance(dp, dict) and "_claim_id" in dp:
                 if dp.get("confidence") not in (None, "unknown"):

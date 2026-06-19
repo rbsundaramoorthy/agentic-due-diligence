@@ -11,7 +11,7 @@ Covers:
 
 import json
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -28,7 +28,9 @@ def make_tracer():
 
 
 def make_mock_client():
-    return MagicMock()
+    client = MagicMock()
+    client.messages.create = AsyncMock()
+    return client
 
 
 def make_dp(value="test", confidence="high", sources=None, severity=None, reasoning=None):

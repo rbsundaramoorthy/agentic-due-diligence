@@ -143,4 +143,4 @@ def test_roundtrip_preserves_gaps():
 
 def test_schema_version_is_present():
     doc = _minimal_doc()
-    assert doc.schema_version == "1.0.6"
+    assert doc.schema_version == "1.0.7"

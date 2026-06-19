@@ -118,11 +118,12 @@ class BaseAgent(ABC):
     PROMPT_VERSION: str = "1.0"
     MAX_RETRIES: int = 3
     MAX_TURNS: int = 10  # Max tool-use turns before forcing completion
+    DEFAULT_MAX_TOKENS: int = 4096
 
     def __init__(
         self,
         tracer: AgentTracer,
-        client: anthropic.Anthropic,
+        client: anthropic.AsyncAnthropic,
         db: Optional[AgentDB] = None,
         company_context: Optional[dict] = None,
     ):
@@ -254,13 +255,13 @@ class BaseAgent(ABC):
             try:
                 call_kwargs: dict = dict(
                     model=self.MODEL,
-                    max_tokens=4096,
+                    max_tokens=8192 if _budget_exhausted else self.DEFAULT_MAX_TOKENS,
                     system=effective_system,
                     messages=self.messages,
                 )
                 if not _budget_exhausted:
                     call_kwargs["tools"] = tools
-                response = self.client.messages.create(**call_kwargs)
+                response = await self.client.messages.create(**call_kwargs)
                 self.tracer.end_span(
                     span,
                     input_tokens=response.usage.input_tokens,
@@ -422,7 +423,13 @@ class BaseAgent(ABC):
                         "error_summary": None,
                     }
                 except Exception as e:
-                    # Parsing failed — retry if possible
+                    # Parsing failed — retry if possible.
+                    # If the model was cut off by max_tokens, force _budget_exhausted
+                    # so the retry call omits tools and the model emits JSON directly
+                    # rather than calling more tools (which grows context and repeats
+                    # the truncation).
+                    if getattr(response, "stop_reason", None) == "max_tokens":
+                        _budget_exhausted = True
                     if self.retries < self.MAX_RETRIES:
                         self.retries += 1
                         self._transition(AgentState.RETRY)

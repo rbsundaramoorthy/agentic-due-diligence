@@ -179,6 +179,17 @@
           ],
           "default": null
         },
+        "revenue_prior_year": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Claim"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "revenue_growth": {
           "anyOf": [
             {
@@ -845,7 +856,7 @@
   "description": "Canonical due diligence report \u2014 the source of truth for all renderers.\n\nEvery run produces one ReportDocument, written to outputs/report_{slug}.json.\nThe markdown, PDF, and HTML files are renders of this document, not edited\nindependently.\n\nschema_version follows the policy in SCHEMA_VERSION above.",
   "properties": {
     "schema_version": {
-      "default": "1.0.6",
+      "default": "1.0.7",
       "description": "Schema version. See SCHEMA_VERSION in models.py for the versioning policy.",
       "title": "Schema Version",
       "type": "string"

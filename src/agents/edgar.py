@@ -139,6 +139,14 @@ _OUTPUT_SCHEMA = """{
     "derived_from": [],
     "reasoning": "From us-gaap.Revenues, FY2024 10-K"
   },
+  "revenue_prior_year": {
+    "value": "$3.9B (FY2023) — transcribe from prior_revenue.formatted + fiscal_year in tool result; null if absent",
+    "confidence": "high",
+    "sources": ["https://data.sec.gov/api/xbrl/companyfacts/CIK..."],
+    "derived": false,
+    "derived_from": []
+  },
+  "revenue_growth_pct": 7.7,
   "profitability": {
     "value": "Net income $1.1B (FY2024)",
     "confidence": "high",
@@ -226,6 +234,11 @@ Step 1 — Call edgar_find_company to look up the company's CIK.
 Step 2 — Call edgar_get_financials with the CIK from step 1.
   • If xbrl_available=true: use revenue.formatted and net_income.formatted.
     Note revenue.accession_no for use in step 3.
+  • If prior_revenue is present in the tool result: transcribe
+    prior_revenue.formatted + " (FY" + prior_revenue.fiscal_year + ")" as
+    revenue_prior_year.value (confidence=high, same sources as revenue).
+    Transcribe revenue_growth_pct as the numeric field revenue_growth_pct.
+    If prior_revenue is absent: set revenue_prior_year=null, revenue_growth_pct=null.
   • If xbrl_available=false (brand-new IPO filer, XBRL not yet aggregated):
     Gap revenue and profitability — set value="unknown", confidence="unknown",
     sources=[]. Cite the filing in reasoning: "XBRL not yet available in

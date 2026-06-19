@@ -207,10 +207,10 @@ class TestRiskAttributionRouting:
 
     def _make_agent(self, llm_responses: list) -> RiskAgent:
         client = MagicMock()
-        client.messages.create.side_effect = [
+        client.messages.create = AsyncMock(side_effect=[
             _make_tool_response("samgov_contract_search", {"company_name": "Example Aerospace Corp"}),
             _make_tool_response("courtlistener_case_search", {"company_name": "Example Aerospace Corp"}),
-        ] + llm_responses
+        ] + llm_responses)
         return RiskAgent(tracer=_make_tracer(), client=client)
 
     @pytest.mark.asyncio

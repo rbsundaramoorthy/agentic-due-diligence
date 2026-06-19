@@ -431,13 +431,86 @@ async def test_get_financials_jpm_uses_bank_fallback_chain():
 
 @pytest.mark.asyncio
 async def test_get_financials_most_recent_annual_is_selected():
-    """Confirms _extract_most_recent_annual picks FY2025 over FY2024 for Apple."""
+    """Confirms _extract_two_most_recent_annual picks FY2025 over FY2024 for Apple."""
     mock_resp = _mock_response("companyfacts_aapl.json")
     with patch("src.sources.edgar._rate_limited_get", new=AsyncMock(return_value=mock_resp)):
         result_str = await edgar_get_financials("0000320193")
     result = json.loads(result_str)
     assert result["revenue"]["fiscal_year"] == "2025"
     assert result["revenue"]["period_end"] == "2025-09-27"
+
+
+@pytest.mark.asyncio
+async def test_get_financials_prior_year_extracted():
+    """Apple FY2024 is the prior year for the FY2025 revenue, enabling YoY growth.
+
+    Regression anchor: prior_revenue.value_usd == 391,035,000,000 (FY2024).
+    The companyfacts series has comparative duplicates (same period in multiple
+    10-K filings); _extract_two_most_recent_annual deduplicates by period end date
+    so FY2024 and FY2025 10-K appearances of the same period collapse to one.
+    """
+    mock_resp = _mock_response("companyfacts_aapl.json")
+    with patch("src.sources.edgar._rate_limited_get", new=AsyncMock(return_value=mock_resp)):
+        result_str = await edgar_get_financials("0000320193")
+    result = json.loads(result_str)
+
+    assert "prior_revenue" in result, "prior_revenue must be present when ≥2 annual years available"
+    assert result["prior_revenue"]["value_usd"] == 391_035_000_000
+    assert result["prior_revenue"]["formatted"] == "$391.04B"
+    assert result["prior_revenue"]["fiscal_year"] == "2024"
+
+    assert "revenue_growth_pct" in result
+    pct = result["revenue_growth_pct"]
+    # (416161 - 391035) / 391035 * 100 ≈ 6.43 %
+    assert abs(pct - 6.43) < 0.1, f"Expected ~6.43% growth, got {pct:.4f}%"
+
+
+@pytest.mark.asyncio
+async def test_get_financials_single_year_no_prior():
+    """When only one annual observation exists, prior_revenue and revenue_growth_pct are absent."""
+    import copy
+
+    mock_resp_base = _mock_response("companyfacts_aapl.json")
+    base_data = mock_resp_base.json()
+
+    # Trim the RevenueFromContract series to a single observation (latest only)
+    key = "RevenueFromContractWithCustomerExcludingAssessedTax"
+    trimmed = copy.deepcopy(base_data)
+    units = trimmed["facts"]["us-gaap"][key]["units"]["USD"]
+    fy25_only = [u for u in units if u.get("end") == "2025-09-27"]
+    trimmed["facts"]["us-gaap"][key]["units"]["USD"] = fy25_only
+
+    single_resp = MagicMock()
+    single_resp.json = lambda: trimmed
+    single_resp.raise_for_status = lambda: None
+
+    with patch("src.sources.edgar._rate_limited_get", new=AsyncMock(return_value=single_resp)):
+        result_str = await edgar_get_financials("0000320193")
+    result = json.loads(result_str)
+
+    assert result["revenue"]["value_usd"] == 416_161_000_000, "Latest-year revenue must still resolve"
+    assert "prior_revenue" not in result, "prior_revenue must be absent when only one annual year exists"
+    assert "revenue_growth_pct" not in result, "revenue_growth_pct must be absent when prior is unavailable"
+
+
+@pytest.mark.asyncio
+async def test_get_financials_bank_fallback_includes_prior_year():
+    """JPM bank fallback: both interest+noninterest have prior-year data → growth_pct computed."""
+    mock_resp = _mock_response("companyfacts_jpm.json")
+    with patch("src.sources.edgar._rate_limited_get", new=AsyncMock(return_value=mock_resp)):
+        result_str = await edgar_get_financials("0000019617")
+    result = json.loads(result_str)
+
+    assert "prior_revenue" in result, "prior_revenue must be present for JPM (both concepts have ≥2 years)"
+    # FY2022: Interest 72098B + Noninterest 57990B = 130088B
+    assert result["prior_revenue"]["value_usd"] == 89_272_000_000 + 69_380_000_000 - (
+        # FY2023 is latest; FY2022 is prior: 72098 + 57990
+        89_272_000_000 + 69_380_000_000 - (72_098_000_000 + 57_990_000_000)
+    ), "prior_revenue for JPM should be FY2022 sum"
+    # Simpler check:
+    assert result["prior_revenue"]["value_usd"] == 72_098_000_000 + 57_990_000_000
+    assert result["prior_revenue"]["fiscal_year"] == "2022"
+    assert "revenue_growth_pct" in result
 
 
 # ── End-to-end merge test: discovery → financials → assembler ─────────────────

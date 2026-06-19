@@ -44,8 +44,12 @@ _SOFT_BUDGET = int(_AGENT_TIMEOUT * 0.70)  # 210s — soft budget; agent forced 
 
 
 async def _run_with_timeout(agent, task: str) -> dict:
+    console.print(f"  → {agent.AGENT_NAME} starting...")
     try:
-        return await asyncio.wait_for(agent.run(task), timeout=_AGENT_TIMEOUT)
+        result = await asyncio.wait_for(agent.run(task), timeout=_AGENT_TIMEOUT)
+        status = result.get("status", "?")
+        console.print(f"  ✓ {agent.AGENT_NAME} {status}")
+        return result
     except asyncio.TimeoutError:
         console.print(f"  [bold red]⚠ {agent.AGENT_NAME} timed out after {_AGENT_TIMEOUT}s[/bold red]")
         return {"status": "partial", "data": None, "gaps": ["Agent timed out — hard budget exceeded"],
@@ -67,7 +71,9 @@ async def run_due_diligence(company_name: str, json_only: bool = False) -> Agent
     console.print()
 
     # Initialize shared components
-    client = anthropic.Anthropic()  # Uses ANTHROPIC_API_KEY env var
+    # 120s per-request HTTP timeout: above the p99 observed LLM response time (~82s)
+    # but well below the 300s hard agent timeout, so hung API calls surface quickly.
+    client = anthropic.AsyncAnthropic(timeout=120.0)
     tracer = AgentTracer(company_name)
     os.makedirs("outputs", exist_ok=True)
     agent_db = AgentDB(db_path="outputs/agent_log.db")
@@ -321,7 +327,11 @@ def main():
     json_only = "--json-only" in sys.argv
     args = [a for a in sys.argv[1:] if a not in ("--dump-db", "--json-only")]
     company_name = " ".join(args)
-    db = asyncio.run(run_due_diligence(company_name, json_only=json_only))
+    try:
+        db = asyncio.run(run_due_diligence(company_name, json_only=json_only))
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Run interrupted by user (Ctrl+C). Partial results may have been written to outputs/.[/yellow]")
+        sys.exit(0)
 
     if dump:
         _dump_db(db)

@@ -419,13 +419,150 @@ def test_merge_edgar_overlays_profitability():
 
 
 def test_merge_edgar_preserves_other_financial_fields():
+    # With no revenue_prior_year in edgar_data, EDGAR does not compute growth →
+    # the financial agent's value is preserved.
     fin_data = _financial_data()
     fin_data["revenue_growth"] = {"value": "5% YoY", "confidence": "medium", "sources": []}
     financial = _assemble_financial(fin_data)
-    edgar = _edgar_data_succeeded()
+    edgar = _edgar_data_succeeded()  # no revenue_prior_year, no revenue_growth_pct
     merged = _merge_edgar(financial, edgar)
     assert merged.revenue_growth is not None
     assert merged.revenue_growth.value == "5% YoY"
+
+
+def test_merge_edgar_computes_revenue_growth():
+    """When EDGAR has both revenue and revenue_prior_year with revenue_growth_pct,
+    _merge_edgar emits a derived revenue_growth Claim at primary_document tier."""
+    from src.synthesis.assembler import annotate_claim_ids
+
+    edgar = annotate_claim_ids(_edgar_data_succeeded(
+        revenue={
+            "value": "$416.16B (FY2025)",
+            "confidence": "high",
+            "sources": ["https://data.sec.gov/api/xbrl/companyfacts/CIK0000320193.json"],
+        },
+        revenue_prior_year={
+            "value": "$391.04B (FY2024)",
+            "confidence": "high",
+            "sources": ["https://data.sec.gov/api/xbrl/companyfacts/CIK0000320193.json"],
+        },
+        revenue_growth_pct=6.43,
+    ))
+
+    financial = _assemble_financial(_financial_data())
+    merged = _merge_edgar(financial, edgar)
+
+    assert merged.revenue_growth is not None
+    rg = merged.revenue_growth
+    assert "+6.4%" in rg.value
+    assert "FY2025" in rg.value
+    assert "FY2024" in rg.value
+    assert rg.confidence.value == "high"
+    assert rg.agent == "edgar"
+    assert rg.derived is True
+    assert len(rg.derived_from) == 2
+    # derived_from must reference the revenue and revenue_prior_year claim_ids
+    rev_id = edgar["revenue"]["_claim_id"]
+    prior_id = edgar["revenue_prior_year"]["_claim_id"]
+    assert rev_id in rg.derived_from
+    assert prior_id in rg.derived_from
+    # tier: companyfacts URL is primary_document
+    from src.schemas.models import SourceTier
+    assert rg.sources[0].tier == SourceTier.PRIMARY_DOCUMENT
+
+
+def test_merge_edgar_revenue_growth_absent_when_no_prior():
+    """When edgar_data has no revenue_prior_year and financial agent has unknown growth, stays None."""
+    from src.synthesis.assembler import annotate_claim_ids
+
+    edgar = annotate_claim_ids(_edgar_data_succeeded())  # no prior year, no pct
+    financial = _assemble_financial(_financial_data(
+        revenue_growth={"value": "unknown", "confidence": "unknown", "sources": []}
+    ))
+    merged = _merge_edgar(financial, edgar)
+
+    assert merged.revenue_growth is None
+
+
+def test_merge_edgar_revenue_growth_overrides_financial_agent_when_prior_present():
+    """EDGAR-computed growth overrides the financial agent's guess."""
+    from src.synthesis.assembler import annotate_claim_ids
+
+    fin_data = _financial_data()
+    fin_data["revenue_growth"] = {"value": "5% YoY (estimate)", "confidence": "low", "sources": []}
+    financial = _assemble_financial(fin_data)
+
+    edgar = annotate_claim_ids(_edgar_data_succeeded(
+        revenue={
+            "value": "$416.16B (FY2025)",
+            "confidence": "high",
+            "sources": ["https://data.sec.gov/api/xbrl/companyfacts/CIK0000320193.json"],
+        },
+        revenue_prior_year={
+            "value": "$391.04B (FY2024)",
+            "confidence": "high",
+            "sources": ["https://data.sec.gov/api/xbrl/companyfacts/CIK0000320193.json"],
+        },
+        revenue_growth_pct=6.43,
+    ))
+    merged = _merge_edgar(financial, edgar)
+    assert "+6.4%" in merged.revenue_growth.value
+    assert merged.revenue_growth.agent == "edgar"
+    assert merged.revenue_growth.derived is True
+
+
+def test_merge_edgar_derived_from_resolves_in_assembled_doc():
+    """revenue_growth.derived_from IDs resolve against the assembled ReportDocument.
+
+    Validates that _validate_derived_from (called inside assemble_report) does not
+    raise — meaning revenue_prior_year's claim_id is present in doc.financial.
+    """
+    from src.synthesis.assembler import annotate_claim_ids, assemble_report
+
+    edgar = annotate_claim_ids(_edgar_data_succeeded(
+        revenue={
+            "value": "$416.16B (FY2025)",
+            "confidence": "high",
+            "sources": ["https://data.sec.gov/api/xbrl/companyfacts/CIK0000320193.json"],
+        },
+        revenue_prior_year={
+            "value": "$391.04B (FY2024)",
+            "confidence": "high",
+            "sources": ["https://data.sec.gov/api/xbrl/companyfacts/CIK0000320193.json"],
+        },
+        revenue_growth_pct=6.43,
+    ))
+    fin_data = _financial_data(
+        revenue={"value": "unknown", "confidence": "unknown", "sources": []},
+        revenue_growth={"value": "unknown", "confidence": "unknown", "sources": []},
+        profitability={"value": "unknown", "confidence": "unknown", "sources": []},
+    )
+
+    # assemble_report calls _validate_derived_from internally — if derived_from IDs
+    # are dangling, it raises ValueError.
+    doc = assemble_report(
+        research_data=None,
+        financial_data=fin_data,
+        risk_data=None,
+        social_media_data=None,
+        synthesis_data=None,
+        trace_summary=_trace_summary(),
+        edgar_data=edgar,
+    )
+    assert doc.financial.revenue_growth is not None
+    assert doc.financial.revenue_prior_year is not None
+    # Both derived_from IDs must be in the assembled claim set
+    all_ids = {
+        c.claim_id
+        for section in (doc.research, doc.financial, doc.risk, doc.social_media)
+        if section is not None
+        for fn in type(section).model_fields
+        for c in ([getattr(section, fn)] if hasattr(getattr(section, fn), "claim_id") else
+                  (getattr(section, fn) if isinstance(getattr(section, fn), list) else []))
+        if hasattr(c, "claim_id")
+    }
+    for ref_id in doc.financial.revenue_growth.derived_from:
+        assert ref_id in all_ids, f"derived_from ref '{ref_id}' not in assembled claim set"
 
 
 def test_merge_edgar_no_op_for_not_sec_reporting():

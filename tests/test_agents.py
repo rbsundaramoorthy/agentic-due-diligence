@@ -33,7 +33,9 @@ def make_tracer():
 
 
 def make_mock_client():
-    return MagicMock()
+    client = MagicMock()
+    client.messages.create = AsyncMock()
+    return client
 
 
 def make_data_point(value="test", confidence="high"):

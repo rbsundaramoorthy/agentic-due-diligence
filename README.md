@@ -231,6 +231,19 @@ This is a working system, not a platform. If I were taking it into a regulated p
 5. **Cost and deployment controls.** Per-run budgets, model routing by task, and deployment gates tied to eval thresholds.
 6. **Finish the derived-metric path.** Compute annual growth and similar figures deterministically from EDGAR facts as primary-tier derived claims, gapping honestly when the data is not present.
 
+## Agentic AI Control Plane
+
+I created a one-page reference architecture for production agentic AI systems. This project is one concrete instance of it:
+
+- Intent & workflow gating
+- ACL-safe RAG
+- Tool governance
+- Agent runtime controls
+- Evals and guardrails
+- Observability and replayable traces
+
+[View the Agentic AI Control Plane (PDF)](docs/agentic-ai-control-plane.pdf)
+
 ---
 
 ### Why this project exists

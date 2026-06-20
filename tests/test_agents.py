@@ -115,6 +115,13 @@ def _make_tool_response(tool_name: str, tool_input: dict):
     return SimpleNamespace(content=[block], stop_reason="tool_use", usage=usage)
 
 
+def _make_truncated_response(text: str):
+    """Create a mock response cut off by max_tokens (unparseable truncated JSON)."""
+    block = SimpleNamespace(type="text", text=text)
+    usage = SimpleNamespace(input_tokens=100, output_tokens=4096)
+    return SimpleNamespace(content=[block], stop_reason="max_tokens", usage=usage)
+
+
 # ── CompanyFinancials Schema Tests ────────────────────────────────
 
 class TestCompanyFinancials:
@@ -846,6 +853,43 @@ class TestSoftBudget:
         # The LLM call must not include tools when budget is exhausted
         call_kwargs = client.messages.create.call_args.kwargs
         assert "tools" not in call_kwargs, "tools must be omitted when budget is exhausted"
+
+    @pytest.mark.asyncio
+    async def test_max_tokens_truncation_is_sticky_and_recovers(self):
+        """A max_tokens-truncated turn must force budget exhaustion that STICKS:
+        the retry uses max_tokens=8192 and omits tools, breaking the 4096 storm.
+
+        Regression for the retry storm: previously _budget_exhausted was recomputed
+        from the soft-budget timer at the top of every turn, clobbering the True set
+        by the max_tokens handler, so every retry re-truncated at 4096 until timeout.
+        """
+        client = make_mock_client()
+        # Turn 0: truncated, unparseable JSON (cut off by max_tokens).
+        # Turn 1 (retry): full valid JSON.
+        client.messages.create.side_effect = [
+            _make_truncated_response('{"company_name": "TestCo", "descrip'),
+            _make_text_response(json.dumps(VALID_RESEARCH_JSON)),
+        ]
+        agent = ResearchAgent(tracer=make_tracer(), client=client)
+        # No soft budget — exhaustion here must come solely from the max_tokens hit.
+        agent.soft_budget_seconds = None
+
+        result = await agent.run("Research TestCo")
+
+        # Recovered with valid data on the retry.
+        assert result["data"] is not None
+        assert result["data"]["company_name"] == "TestCo"
+
+        # Two LLM calls were made; the SECOND must carry the sticky budget:
+        # max_tokens bumped to 8192 and tools omitted.
+        assert client.messages.create.call_count == 2
+        retry_kwargs = client.messages.create.call_args_list[1].kwargs
+        assert retry_kwargs["max_tokens"] == 8192, (
+            "retry after max_tokens truncation must request 8192 tokens, not 4096"
+        )
+        assert "tools" not in retry_kwargs, (
+            "retry after max_tokens truncation must omit tools"
+        )
 
     @pytest.mark.asyncio
     async def test_no_budget_completes_normally(self):

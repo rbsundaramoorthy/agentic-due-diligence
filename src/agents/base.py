@@ -212,6 +212,10 @@ class BaseAgent(ABC):
         message_seq = 0
         run_start = time.monotonic()
         _budget_forced = False
+        # Sticky: once a max_tokens truncation forces budget exhaustion, it must
+        # persist across turns. Otherwise the per-turn recompute below clobbers it
+        # and the model re-truncates every retry (4096-token storm until timeout).
+        _max_tokens_truncated = False
 
         # Log initial user task as first message
         if self.db:
@@ -228,8 +232,11 @@ class BaseAgent(ABC):
             # if the previous turn returned tool_use, we must send tool_results
             # before removing tools.
             _budget_exhausted = (
-                self.soft_budget_seconds is not None
-                and time.monotonic() - run_start >= self.soft_budget_seconds
+                _max_tokens_truncated
+                or (
+                    self.soft_budget_seconds is not None
+                    and time.monotonic() - run_start >= self.soft_budget_seconds
+                )
             )
             if _budget_exhausted:
                 _budget_forced = True
@@ -430,6 +437,7 @@ class BaseAgent(ABC):
                     # the truncation).
                     if getattr(response, "stop_reason", None) == "max_tokens":
                         _budget_exhausted = True
+                        _max_tokens_truncated = True
                     if self.retries < self.MAX_RETRIES:
                         self.retries += 1
                         self._transition(AgentState.RETRY)

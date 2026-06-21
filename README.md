@@ -187,7 +187,6 @@ spot-check against the report's sources.
 
 - **[Read it on GitHub](docs/sample-report-apple.md)** (Markdown, renders in the browser)
 - **[Download the PDF](docs/sample-report-apple.pdf)** (formatted report)
-- **[Standalone HTML](docs/sample-report-apple.html)** (clickable sources)
 
 ### Pinned run
 
@@ -233,25 +232,49 @@ variability is expected, and it is why the committed report is frozen to the run
 
 ## How to run locally
 
-> Verify the entrypoint and environment variable names against the repo; adjust if they differ.
+Requires Python 3.11+.
 
 ```bash
 git clone https://github.com/rbsundaramoorthy/agentic-due-diligence.git
 cd agentic-due-diligence
 
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-
-export ANTHROPIC_API_KEY=sk-ant-...
-
-# run a report
-python -m src.main --company "Apple Inc." --out reports/
-
-# run the tests
-pytest -q
+python -m venv venv && source venv/bin/activate
+pip install -e ".[dev]"          # dependencies are declared in pyproject.toml
 ```
 
-The output is a canonical `ReportDocument` (JSON) plus Markdown, PDF, and HTML renders in the output directory.
+### API keys
+
+Set these before running. `ANTHROPIC_API_KEY` and `BRAVE_API_KEY` are required for a
+full live run; the other two unlock primary-tier source coverage and the run degrades
+gracefully without them.
+
+```bash
+# Required
+export ANTHROPIC_API_KEY=sk-ant-...        # Claude — every agent and synthesis
+export BRAVE_API_KEY=...                    # web search for Research/Financial/Risk/Social
+
+# Recommended (the run still completes without them, with reduced source coverage)
+export SAM_GOV_API_KEY=...                  # SAM.gov federal-contractor registry (Risk agent)
+export COURTLISTENER_API_KEY=...            # CourtListener PACER dockets (Risk agent; unauthenticated works but is rate-limited)
+```
+
+No keys to hand? Set `USE_MOCK_SEARCH=true` to run without `BRAVE_API_KEY` using canned
+search results. Two further optional vars: `OPENCORPORATES_API_KEY` (entity registration
+for the Research agent; falls back to web search if absent) and `EDGAR_USER_AGENT`
+(identifies your app to SEC EDGAR, e.g. `"YourApp/1.0 you@example.com"`).
+
+```bash
+# run a report (company name is a positional argument)
+python -m src.main "APPLE"
+python -m src.main "Stripe" --json-only     # JSON only, skip PDF/HTML
+python -m src.main "Stripe" --dump-db       # also print the full observability DB
+
+# run the tests
+python -m pytest tests/
+```
+
+Every run writes to `outputs/`: the canonical `ReportDocument` (`report_<slug>.json`) plus
+Markdown, PDF, and HTML renders, and the SQLite observability DB (`agent_log.db`).
 
 ## What I would productionize next
 

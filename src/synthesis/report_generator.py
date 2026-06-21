@@ -16,6 +16,7 @@ from src.synthesis.assembler import assemble_report, build_render_dicts
 from src.synthesis.render_common import (
     disclaimer_sentences,
     edgar_line,
+    format_generated_et,
     strip_dashes,
     tier_coverage_parts,
 )
@@ -269,7 +270,7 @@ def render_report_from_doc(doc: ReportDocument, output_dir: str = "outputs") -> 
     This is the primary entry point. The old dict-based render_report() is a
     deprecated shim that assembles a ReportDocument and calls this function.
     """
-    now = doc.generated_at.strftime("%Y-%m-%d %H:%M")
+    now = format_generated_et(doc.generated_at)
     m = doc.run_metadata
     cost = m.cost_usd
     total_tokens = m.total_input_tokens + m.total_output_tokens

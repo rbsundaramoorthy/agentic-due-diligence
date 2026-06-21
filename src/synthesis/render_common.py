@@ -8,7 +8,27 @@ claim, allegation, or third party. The only company-specific value is the
 subject company name, which is passed in from the report data.
 """
 
+from datetime import datetime, timezone
 from typing import Optional
+from zoneinfo import ZoneInfo
+
+# ── Generated-timestamp formatting ────────────────────────────────────────────
+# Reports display the "Generated" time in US Eastern. The canonical
+# ReportDocument keeps generated_at in UTC (correct for storage/interchange);
+# this is a display-only conversion. America/New_York handles EST/EDT (daylight
+# saving) automatically, and %Z renders the correct abbreviation.
+_EASTERN = ZoneInfo("America/New_York")
+
+
+def format_generated_et(dt: datetime) -> str:
+    """Format a datetime as US Eastern, e.g. '2026-06-21 01:34 EDT'.
+
+    Naive datetimes are assumed to be UTC (matching how generated_at is set).
+    """
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(_EASTERN).strftime("%Y-%m-%d %H:%M %Z")
+
 
 # ── Dash normalisation ────────────────────────────────────────────────────────
 # House style: no "double dash" glyphs (em / en / figure / horizontal-bar /

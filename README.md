@@ -195,9 +195,9 @@ time, so outputs drift between runs (rankings, scraped counts, and section confi
 all move). The committed files come from one specific run, so what you read matches what
 the system actually produced:
 
-- **Run:** 2026-06-21 05:34
-- **Commit:** b75d5bc793212268a09b89e8e4293bc7836aec26
-- **Run cost / time:** $1.26, 307s, 26 LLM calls, 32 tool calls
+- **Run:** 2026-06-21 02:27 EDT
+- **Commit:** c87435c5039a5b6faf000f47611275e861593450
+- **Run cost / time:** $1.25, 331s, 26 LLM calls, 31 tool calls
 - **EDGAR ground-truth:** matched (CIK 0000320193)
 
 ### What this is, and what it isn't

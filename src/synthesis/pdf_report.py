@@ -15,6 +15,7 @@ from src.synthesis.assembler import assemble_report, build_render_dicts
 from src.synthesis.render_common import (
     disclaimer_sentences,
     edgar_line,
+    format_generated_et,
     strip_dashes,
     tier_coverage_parts,
 )
@@ -1017,7 +1018,7 @@ def render_pdf_report_from_doc(
         build_render_dicts(doc)
     )
     m = doc.run_metadata
-    now = doc.generated_at.strftime("%Y-%m-%d %H:%M")
+    now = format_generated_et(doc.generated_at)
     company = doc.company_name
     cost = m.cost_usd
     duration = m.duration_ms

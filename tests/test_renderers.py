@@ -419,6 +419,31 @@ def test_md_cell_escapes_pipes_and_newlines():
     assert _md_cell("") == "—"
 
 
+def test_generated_timestamp_renders_in_us_eastern():
+    """The 'Generated' time is displayed in US Eastern (DST-aware), not UTC."""
+    from datetime import datetime, timezone
+    from src.synthesis.render_common import format_generated_et
+
+    # Summer → EDT (UTC-4): 05:34 UTC = 01:34 EDT
+    assert format_generated_et(datetime(2026, 6, 21, 5, 34, tzinfo=timezone.utc)) == "2026-06-21 01:34 EDT"
+    # Winter → EST (UTC-5): 05:34 UTC = 00:34 EST
+    assert format_generated_et(datetime(2026, 1, 15, 5, 34, tzinfo=timezone.utc)) == "2026-01-15 00:34 EST"
+    # Naive datetime is treated as UTC.
+    assert format_generated_et(datetime(2026, 6, 21, 5, 34)).endswith("EDT")
+
+
+def test_rendered_generated_line_uses_eastern_zone():
+    """End-to-end: the rendered MD and HTML 'Generated' line carries an ET label."""
+    doc = _full_doc()
+    with tempfile.TemporaryDirectory() as d:
+        md = render_report_from_doc(doc, d)
+        html_path, _ = render_pdf_report_from_doc(doc, d)
+        html = open(html_path).read()
+    gen_line = next(l for l in md.splitlines() if l.startswith("**Generated:**"))
+    assert gen_line.endswith("EDT") or gen_line.endswith("EST")
+    assert "Generated " in html and ("EDT" in html or "EST" in html)
+
+
 # ── House style: no "double dash" glyphs in any rendered report ────────────────
 
 _DASH_GLYPHS = "‒–—―−"  # figure, en, em, horizontal bar, minus

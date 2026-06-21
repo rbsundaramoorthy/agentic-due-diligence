@@ -16,6 +16,7 @@ from typing import Optional
 
 from src.agents.base import BaseAgent
 from src.schemas.models import CompanySynthesis
+from src.synthesis.assembler import derive_revenue_growth_dp
 
 
 def _edgar_overlay_financial_dict(
@@ -47,6 +48,17 @@ def _edgar_overlay_financial_dict(
             # Do NOT copy the financial agent's _claim_id — the financial agent's
             # DataPoint is a gap (unknown/unknown) and will not become a Claim.
             result[field] = dict(dp)  # shallow copy of edgar DataPoint
+    # Surface the EDGAR-derived revenue_growth (the SAME value the assembler will
+    # put in the report) so synthesis reasons over the populated figure instead of
+    # the financial agent's pre-derivation "unknown". Without this, synthesis runs
+    # before _merge_edgar computes growth and falsely flags it as "not computed".
+    # When growth is NOT derivable, the helper returns None and the financial
+    # agent's value (typically a gap) is kept — so a genuinely missing growth
+    # still surfaces. Generic: driven by populated/derived section fields, not by
+    # any field-name or company special-casing.
+    growth_dp = derive_revenue_growth_dp(edgar_data)
+    if growth_dp is not None:
+        result["revenue_growth"] = dict(growth_dp)
     return result
 
 

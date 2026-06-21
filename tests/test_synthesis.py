@@ -549,6 +549,94 @@ class TestEdgarOverlayFinancialDict:
         assert "_claim_id" not in result["revenue"]
 
 
+# ── revenue_growth reconciliation: synthesis must see the derived growth ───────
+
+class TestRevenueGrowthReconciliation:
+    """The Financial Profile shows an EDGAR-derived revenue_growth, but synthesis
+    runs BEFORE the assembler derives it. These tests pin the structural fix: the
+    derived growth is surfaced into the synthesis input so synthesis reasons over
+    the same value the report displays — and a genuinely missing growth still gaps.
+
+    Arbitrary (non-Apple) revenue figures are used deliberately: the fix must be
+    generic, not keyed to any company or hard-coded number.
+    """
+
+    def _financial_deferred(self):
+        # Mirrors a US-public financial agent output: growth deferred to EDGAR.
+        return {
+            "company_name": "Globex Corp",
+            "revenue": {"value": "unknown", "confidence": "unknown", "sources": [],
+                        "reasoning": "EDGAR deferral applied.", "_claim_id": "fin_rev"},
+            "revenue_growth": {"value": "unknown", "confidence": "unknown", "sources": [],
+                               "reasoning": "EDGAR deferral applied — computed by assembler.",
+                               "_claim_id": "fin_growth"},
+        }
+
+    def _edgar(self, with_prior=True):
+        from src.synthesis.assembler import annotate_claim_ids
+        data = {
+            "edgar_lookup_status": "succeeded",
+            "revenue": {"value": "$820M (FY2025)", "confidence": "high",
+                        "sources": ["https://data.sec.gov/x"]},
+            "revenue_growth_pct": 12.3,
+        }
+        if with_prior:
+            data["revenue_prior_year"] = {"value": "$730M (FY2024)", "confidence": "high",
+                                          "sources": ["https://data.sec.gov/x"]}
+        return annotate_claim_ids(data)
+
+    def test_property_derived_growth_reaches_synthesis_input(self):
+        """PROPERTY (fail-before / pass-after): with both years present, the
+        synthesis input carries the DERIVED growth, not the agent's 'unknown'.
+
+        Before the fix the overlay only copied revenue/profitability, so the
+        synthesis input revenue_growth stayed 'unknown' (the trigger for the false
+        'growth not computed' conflict). After the fix it carries the derived value.
+        """
+        from src.synthesis.assembler import annotate_claim_ids
+        fin = annotate_claim_ids(self._financial_deferred())
+        edgar = self._edgar(with_prior=True)
+        overlaid = _edgar_overlay_financial_dict(fin, edgar)
+
+        rg = overlaid["revenue_growth"]
+        assert rg["confidence"] == "high"
+        assert rg["value"] != "unknown"
+        assert "12.3% YoY" in rg["value"]
+        assert "$820M (FY2025)" in rg["value"] and "$730M (FY2024)" in rg["value"]
+        assert rg.get("derived") is True
+        # And it appears, populated, in the actual synthesis prompt text.
+        task = build_synthesis_task("Globex Corp", None, fin, None, None, edgar_data=edgar)
+        assert "12.3% YoY" in task
+
+    def test_negative_missing_prior_year_still_a_gap(self):
+        """When the prior-year figure is missing, growth is NOT derivable, so the
+        overlay must NOT invent one — the agent's deferred/unknown value stays,
+        keeping the gap loud (proves the fix did not blanket-suppress)."""
+        from src.synthesis.assembler import annotate_claim_ids
+        fin = annotate_claim_ids(self._financial_deferred())
+        edgar = self._edgar(with_prior=False)  # no revenue_prior_year
+        overlaid = _edgar_overlay_financial_dict(fin, edgar)
+
+        rg = overlaid["revenue_growth"]
+        assert rg["value"] == "unknown"
+        assert rg["confidence"] == "unknown"
+
+    def test_derived_growth_matches_assembler_canonical_value(self):
+        """Single source of truth: the value surfaced to synthesis is identical to
+        what _merge_edgar puts in the canonical report."""
+        from src.synthesis.assembler import (
+            annotate_claim_ids, _merge_edgar, _assemble_financial,
+        )
+        fin = annotate_claim_ids(self._financial_deferred())
+        edgar = self._edgar(with_prior=True)
+        overlay_value = _edgar_overlay_financial_dict(fin, edgar)["revenue_growth"]["value"]
+
+        section = _assemble_financial(fin)
+        merged = _merge_edgar(section, edgar)
+        assert merged.revenue_growth is not None
+        assert merged.revenue_growth.value == overlay_value
+
+
 # ── build_synthesis_task EDGAR overlay integration Tests ─────────────
 
 class TestBuildSynthesisTaskEdgarOverlay:

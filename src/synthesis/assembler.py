@@ -695,6 +695,49 @@ def _prune_gaps(gaps: List[GapRecord], *sections) -> List[GapRecord]:
 
 # ── EDGAR merge helpers ───────────────────────────────────────────────────────
 
+def derive_revenue_growth_dp(edgar_data: Optional[dict]) -> Optional[dict]:
+    """Single source of truth for the EDGAR-derived revenue_growth value.
+
+    Returns an agent-layer DataPoint dict (value/confidence/sources/reasoning/
+    derived/derived_from) when YoY growth is derivable from the two XBRL annual
+    revenue observations, else None. "Derivable" means edgar_lookup_status is
+    'succeeded' and edgar_data carries revenue + revenue_prior_year (both with
+    known confidence) and a non-None revenue_growth_pct.
+
+    Used by BOTH _merge_edgar (to build the canonical Claim) and the synthesis-
+    input overlay (so synthesis reasons over the same value the report displays).
+    Returning None when growth is not derivable keeps the gap loud — callers must
+    still surface the missing growth rather than inventing one.
+    """
+    if not edgar_data or edgar_data.get("edgar_lookup_status") != "succeeded":
+        return None
+    rev_pct = edgar_data.get("revenue_growth_pct")
+    rev_dp = edgar_data.get("revenue")
+    prior_dp = edgar_data.get("revenue_prior_year")
+    if rev_pct is None:
+        return None
+    if not (rev_dp and rev_dp.get("confidence") not in (None, "unknown")):
+        return None
+    if not (prior_dp and prior_dp.get("confidence") not in (None, "unknown")):
+        return None
+    sign = "+" if rev_pct >= 0 else ""
+    value = f"{sign}{rev_pct:.1f}% YoY ({rev_dp['value']} vs {prior_dp['value']})"
+    reasoning = (
+        "Computed from audited XBRL annual revenue series "
+        f"(same concept, two consecutive fiscal years: {prior_dp['value']} → {rev_dp['value']})"
+    )
+    source_urls = [u for u in (rev_dp.get("sources") or []) if _is_url(u)]
+    derived_from = [cid for cid in (rev_dp.get("_claim_id"), prior_dp.get("_claim_id")) if cid]
+    return {
+        "value": value,
+        "confidence": "high",
+        "sources": source_urls,
+        "reasoning": reasoning,
+        "derived": True,
+        "derived_from": derived_from,
+    }
+
+
 def _merge_edgar(
     financial: Optional[ReportFinancial],
     edgar_data: dict,
@@ -724,32 +767,25 @@ def _merge_edgar(
             if claim is not None:
                 updates[field] = claim
 
-    # Compute revenue_growth from the two XBRL revenue observations.
-    rev_pct = edgar_data.get("revenue_growth_pct")
+    # Compute revenue_growth from the two XBRL revenue observations (single source
+    # of truth shared with the synthesis-input overlay). Requires both revenue
+    # claim_ids so derived_from resolves against the assembled document.
+    growth_dp = derive_revenue_growth_dp(edgar_data)
     rev_dp = edgar_data.get("revenue")
     prior_dp = edgar_data.get("revenue_prior_year")
     if (
-        rev_pct is not None
-        and rev_dp and rev_dp.get("_claim_id") and rev_dp.get("confidence") not in (None, "unknown")
-        and prior_dp and prior_dp.get("_claim_id") and prior_dp.get("confidence") not in (None, "unknown")
+        growth_dp is not None
+        and rev_dp and rev_dp.get("_claim_id")
+        and prior_dp and prior_dp.get("_claim_id")
     ):
-        sign = "+" if rev_pct >= 0 else ""
-        growth_value = (
-            f"{sign}{rev_pct:.1f}% YoY "
-            f"({rev_dp['value']} vs {prior_dp['value']})"
-        )
-        source_urls = [u for u in (rev_dp.get("sources") or []) if _is_url(u)]
         updates["revenue_growth"] = Claim(
             claim_id=_new_claim_id(),
             field_name="revenue_growth",
-            value=growth_value,
+            value=growth_dp["value"],
             confidence=ConfidenceLevel.HIGH,
-            sources=[SourceRef(url=u, tier=_infer_tier(u)) for u in source_urls],
+            sources=[SourceRef(url=u, tier=_infer_tier(u)) for u in growth_dp["sources"]],
             agent="edgar",
-            reasoning=(
-                "Computed from audited XBRL annual revenue series "
-                f"(same concept, two consecutive fiscal years: {prior_dp['value']} → {rev_dp['value']})"
-            ),
+            reasoning=growth_dp["reasoning"],
             derived=True,
             derived_from=[rev_dp["_claim_id"], prior_dp["_claim_id"]],
         )

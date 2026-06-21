@@ -9,9 +9,46 @@ a ReportDocument from raw agent dicts and delegates to render_report_from_doc.
 
 import os
 from typing import Optional
+from urllib.parse import urlparse
 
 from src.schemas.models import Claim, ConfidenceLevel, ReportDocument, SeverityLevel
 from src.synthesis.assembler import assemble_report, build_render_dicts
+from src.synthesis.render_common import (
+    disclaimer_sentences,
+    edgar_line,
+    strip_dashes,
+    tier_coverage_parts,
+)
+
+
+def _clean_source_label(url: str) -> str:
+    """Return a clean, human-readable label for a source URL (domain or 'Source')."""
+    try:
+        netloc = urlparse(url).netloc.lower().removeprefix("www.")
+        return netloc or "Source"
+    except Exception:
+        return "Source"
+
+
+def _source_links_md(sources: list) -> str:
+    """Render every source as a clickable markdown link with a clean label.
+
+    Renders all sources (never truncates to N), each as [domain](url). Returns
+    an em-dash when there are no usable sources.
+    """
+    links = [f"[{_clean_source_label(u)}]({u})" for u in (sources or []) if u]
+    return ", ".join(links) if links else "—"
+
+
+def _md_cell(text: str) -> str:
+    """Make a string safe for a markdown table cell without losing content.
+
+    Escapes pipes and collapses newlines (markdown rows are single-line) so no
+    cell ever breaks the table. Does NOT truncate — full content is preserved
+    and wraps when the markdown is rendered.
+    """
+    s = str(text).replace("|", "\\|").replace("\n", " ").replace("\r", " ").strip()
+    return s or "—"
 
 
 def _confidence_badge(conf: str) -> str:
@@ -96,10 +133,8 @@ def _render_list_as_table(lines: list, title: str, items: list, columns: list) -
     for dp in items:
         cells = []
         for _, accessor in columns:
-            if callable(accessor):
-                cells.append(accessor(dp))
-            else:
-                cells.append(str(dp.get(accessor, "—")))
+            raw = accessor(dp) if callable(accessor) else dp.get(accessor, "—")
+            cells.append(_md_cell(raw))
         lines.append(f"| {' | '.join(cells)} |")
     lines.append("")
 
@@ -247,6 +282,37 @@ def render_report_from_doc(doc: ReportDocument, output_dir: str = "outputs") -> 
         build_render_dicts(doc)
     )
 
+    # Column grammars (one predictable shape per table type).
+    # Synthesized-claim tables: Item, Confidence (no Sources, no Agents).
+    _claim_cols = [
+        ("Item",       lambda dp: dp.get("value", "—")),
+        ("Confidence", lambda dp: _confidence_badge(dp.get("confidence", "unknown"))),
+    ]
+    # Evidence tables: Item, Confidence, Sources (clickable).
+    _evidence_cols = [
+        ("Item",       lambda dp: dp.get("value", "—")),
+        ("Confidence", lambda dp: _confidence_badge(dp.get("confidence", "unknown"))),
+        ("Sources",    lambda dp: _source_links_md(dp.get("sources", []))),
+    ]
+
+    def _kv_rows(fields: list, data: dict) -> None:
+        """Append an attribute table: Field, Value, Confidence."""
+        lines.append("| Field | Value | Confidence |")
+        lines.append("|-------|-------|------------|")
+        for label, key in fields:
+            dp = data.get(key, {})
+            lines.append(
+                f"| {_md_cell(label)} | {_md_cell(dp.get('value', '—'))} "
+                f"| {_confidence_badge(dp.get('confidence', 'unknown'))} |"
+            )
+        lines.append("")
+
+    def _section(title: str) -> None:
+        lines.append("---")
+        lines.append("")
+        lines.append(f"## {title}")
+        lines.append("")
+
     lines = []
     lines.append(f"# Due Diligence Report: {doc.company_name}")
     lines.append("")
@@ -258,180 +324,142 @@ def render_report_from_doc(doc: ReportDocument, output_dir: str = "outputs") -> 
     )
     lines.append(f"**Duration:** {duration_ms / 1000:.1f} seconds")
 
-    # Read section/overall confidence from run_metadata (computed at assembly time).
-    # Fall back to on-the-fly computation for documents assembled before this feature.
+    # Overall confidence plus per-section confidences (display only — values come
+    # from run_metadata.section_confidences, never recomputed here when present;
+    # fall back to on-the-fly computation only for legacy docs).
     sc = doc.run_metadata.section_confidences
     oc = doc.run_metadata.overall_confidence
     if not sc:
         import warnings as _w
         _w.warn("run_metadata.section_confidences is empty — falling back to on-the-fly computation")
-        oc = _report_confidence_from_doc(doc)
-        report_score = oc  # 0.0-1.0 fraction from fallback
+        report_score = _report_confidence_from_doc(doc)
     else:
         report_score = oc / 100.0 if oc is not None else None
-
     if report_score is not None:
-        lines.append(f"**Overall Report Confidence:** {_confidence_score_badge(report_score)}")
-        lines.append("")
-        lines.append("| Section | Weight | Confidence |")
-        lines.append("|---------|--------|------------|")
-        for label, key, weight in [
-            ("Financial",    "financial",    "40%"),
-            ("Risk",         "risk",         "40%"),
-            ("Social Media", "social_media", "20%"),
-        ]:
+        lines.append(f"**Overall Confidence:** {_confidence_score_badge(report_score)}")
+        # All five section confidences in report-section order, no per-item weight
+        # labels (Research and Synthesis are not weighted into Overall).
+        sec_parts = []
+        for label, key in [("Research", "research"), ("Financial", "financial"),
+                           ("Risk", "risk"), ("Social Media", "social_media"),
+                           ("Synthesis", "synthesis")]:
             if sc and key in sc:
-                sec_score = sc[key] / 100.0
+                sec_parts.append(f"{label} {sc[key]:.0f}%")
             elif not sc:
-                # fallback path: compute from section directly
-                section = getattr(doc, key if key != "social_media" else "social_media", None)
-                sec_score = _section_confidence_from_doc(section) if section else None
-            else:
-                sec_score = None
-            if sec_score is not None:
-                lines.append(f"| {label} | {weight} | {_confidence_score_badge(sec_score)} |")
-            else:
-                lines.append(f"| {label} | {weight} | ⚫ No data |")
-        lines.append("")
-    else:
-        lines.append("")
-
-    # Synthesis / Executive Summary
-    if synthesis_data:
-        lines.append("---")
-        lines.append("")
-        lines.append("## Executive Summary")
-        lines.append("")
-
-        rec = synthesis_data.get("investment_recommendation", {})
-        rec_value = rec.get("value", "unknown")
-        rec_conf = rec.get("confidence", "unknown")
-        lines.append(
-            f"**Recommendation:** {_recommendation_badge(rec_value)} "
-            f"({_confidence_badge(rec_conf)})"
-        )
-        lines.append("")
-
-        rationale = synthesis_data.get("recommendation_rationale", {})
-        if rationale.get("value") and rationale["value"] not in ("unknown", ""):
-            lines.append(f"> {rationale['value']}")
+                section = getattr(doc, key, None)
+                if section is not None:
+                    sec_parts.append(f"{label} {_section_confidence_from_doc(section)*100:.0f}%")
+        if sec_parts:
             lines.append("")
+            lines.append(" · ".join(sec_parts))
+            lines.append("")
+            lines.append(
+                "_Overall is a weighted blend of Financial and Risk (40% each) and "
+                "Social Media (20%); Research and Synthesis are reported but not weighted._"
+            )
+    lines.append("")
 
+    # ── Disclaimer (prominent, near the top) ─────────────────────────────────
+    lines.append("> ⚠️ **Disclaimer**  ")
+    for sentence in disclaimer_sentences(doc.company_name):
+        lines.append(f"> {sentence}  ")
+    lines.append("")
+
+    # ── Group 1: Assessment ──────────────────────────────────────────────────
+    if synthesis_data:
+        _section("Executive Summary")
         summary = synthesis_data.get("executive_summary", {})
         if summary.get("value") and summary["value"] not in ("unknown", ""):
             lines.append(summary["value"])
             lines.append("")
 
-        _synth_cols = [
-            ("Item",       lambda dp: _truncate(dp.get("value", "—"), 100)),
-            ("Confidence", lambda dp: _confidence_badge(dp.get("confidence", "unknown"))),
-            ("Agents",     lambda dp: ", ".join(dp.get("sources", [])[:4]) or "—"),
-        ]
-        _render_list_as_table(lines, "Key Strengths",  synthesis_data.get("key_strengths", []),  _synth_cols)
-        _render_list_as_table(lines, "Key Concerns",   synthesis_data.get("key_concerns", []),   _synth_cols)
+        _render_list_as_table(lines, "Key Strengths", synthesis_data.get("key_strengths", []), _claim_cols)
+        _render_list_as_table(lines, "Key Concerns",  synthesis_data.get("key_concerns", []),  _claim_cols)
 
         red_flags = synthesis_data.get("red_flags", [])
         if red_flags:
+            # Severity column (and its legend) appear ONLY here.
+            lines.append("_Severity = risk impact; Confidence = data reliability. "
+                         "Sorted by severity (most severe first)._")
+            lines.append("")
             _flag_cols = [
-                ("Red Flag",   lambda dp: _truncate(dp.get("value", "—"), 100)),
+                ("Red Flag",   lambda dp: dp.get("value", "—")),
                 ("Severity",   lambda dp: _severity_badge(dp.get("severity", "")) or "—"),
                 ("Confidence", lambda dp: _confidence_badge(dp.get("confidence", "unknown"))),
-                ("Agents",     lambda dp: ", ".join(dp.get("sources", [])[:4]) or "—"),
             ]
             _render_list_as_table(lines, "Red Flags", _sort_by_severity(red_flags), _flag_cols)
 
-        conflicts = synthesis_data.get("data_conflicts", [])
-        if conflicts:
-            _conflict_cols = [
-                ("Conflict", lambda dp: _truncate(dp.get("value", "—"), 100)),
-                ("Agents",   lambda dp: " vs ".join(dp.get("sources", [])[:2]) or "—"),
-                ("Confidence", lambda dp: _confidence_badge(dp.get("confidence", "unknown"))),
-            ]
-            _render_list_as_table(lines, "Data Conflicts", conflicts, _conflict_cols)
+    # ── Group 2: Data Quality & Open Items ───────────────────────────────────
+    if synthesis_data or doc.gaps:
+        _section("Data Quality & Open Items")
 
-        _render_list_as_table(
-            lines, "Follow-Up Questions",
-            synthesis_data.get("follow_up_questions", []),
-            [
-                ("Question",       lambda dp: _truncate(dp.get("value", "—"), 120)),
-                ("Why It Matters", lambda dp: _truncate(dp.get("reasoning", "") or "—", 80)),
-            ],
-        )
+        if synthesis_data:
+            dq = synthesis_data.get("data_quality", {})
+            if dq.get("value") and dq["value"] not in ("unknown", ""):
+                dq_badge = (_confidence_badge(dq["value"])
+                            if dq["value"] in ("high", "medium", "low") else dq["value"].upper())
+                lines.append(f"**Data Quality:** {dq_badge}")
+                lines.append("")
 
-        dq = synthesis_data.get("data_quality", {})
-        if dq.get("value") and dq["value"] not in ("unknown", ""):
-            dq_badge = _confidence_badge(dq["value"]) if dq["value"] in ("high", "medium", "low") else dq["value"].upper()
-            lines.append(f"**Data Quality:** {dq_badge}")
-            lines.append("")
+            conflicts = synthesis_data.get("data_conflicts", [])
+            if conflicts:
+                _render_list_as_table(lines, "Data Conflicts", conflicts, _claim_cols)
 
-    # Research Section
+        lines.append("### Information Gaps")
+        if doc.gaps:
+            for gap in doc.gaps:
+                lines.append(f"- **{gap.field}** ({gap.agent}): {gap.reason}")
+        else:
+            lines.append("- No critical gaps identified")
+        lines.append("")
+
+        if synthesis_data:
+            _render_list_as_table(
+                lines, "Follow-Up Questions",
+                synthesis_data.get("follow_up_questions", []),
+                [
+                    ("Question",       lambda dp: dp.get("value", "—")),
+                    ("Why It Matters", lambda dp: dp.get("reasoning", "") or "—"),
+                ],
+            )
+
+    # ── Group 3: Company Profile ─────────────────────────────────────────────
     if research_data:
-        lines.append("---")
-        lines.append("")
-        lines.append("## Company Overview")
-        lines.append("")
-        lines.append("| Field | Value | Confidence |")
-        lines.append("|-------|-------|------------|")
-        for label, key in [
+        _section("Company Profile")
+        _kv_rows([
             ("Description", "description"), ("Founded", "founded_year"),
             ("Headquarters", "headquarters"), ("Employees", "employee_count"),
             ("Industry", "industry"), ("Website", "website"),
-        ]:
-            dp = research_data.get(key, {})
-            lines.append(f"| {label} | {_truncate(dp.get('value', '—'))} | {_confidence_badge(dp.get('confidence', 'unknown'))} |")
-        lines.append("")
+        ], research_data)
 
-        _std_cols = [
-            ("Item",       lambda dp: _truncate(dp.get("value", "—"))),
-            ("Confidence", lambda dp: _confidence_badge(dp.get("confidence", "unknown"))),
-        ]
-        _src_cols = _std_cols + [("Sources", lambda dp: ", ".join(dp.get("sources", [])[:2]) or "—")]
-        _render_list_as_table(lines, "Key Products",        research_data.get("key_products", []),        _std_cols)
-        _render_list_as_table(lines, "Leadership",          research_data.get("key_leadership", []),      _std_cols)
-        _render_list_as_table(lines, "Technology Stack",    research_data.get("technology_stack", []),    _std_cols)
-        _render_list_as_table(lines, "Recent Developments", research_data.get("recent_developments", []), _src_cols)
+        _render_list_as_table(lines, "Key Products",        research_data.get("key_products", []),        _claim_cols)
+        _render_list_as_table(lines, "Leadership",          research_data.get("key_leadership", []),      _claim_cols)
+        _render_list_as_table(lines, "Technology Stack",    research_data.get("technology_stack", []),    _claim_cols)
+        _render_list_as_table(lines, "Recent Developments", research_data.get("recent_developments", []), _evidence_cols)
 
-        # P3b: patent data
         patent_count = research_data.get("patent_count", {})
         if patent_count and patent_count.get("value") and patent_count["value"] not in ("unknown", ""):
             lines.append(f"**US Patent Portfolio:** {patent_count['value']} ({_confidence_badge(patent_count.get('confidence', 'unknown'))})")
             lines.append("")
-        _render_list_as_table(lines, "Notable Patents", research_data.get("notable_patents", []), _src_cols)
+        _render_list_as_table(lines, "Notable Patents", research_data.get("notable_patents", []), _evidence_cols)
 
-    # Financial Section
+    # ── Group 4: Financial Detail ────────────────────────────────────────────
     if financial_data:
-        lines.append("---")
-        lines.append("")
-        lines.append("## Financial Profile")
-        lines.append("")
-        lines.append("| Metric | Value | Confidence |")
-        lines.append("|--------|-------|------------|")
-        for label, key in [
+        _section("Financial Profile")
+        _kv_rows([
             ("Revenue", "revenue"), ("Revenue Growth", "revenue_growth"),
             ("Profitability", "profitability"), ("Total Funding", "total_funding"),
             ("Last Funding Round", "last_funding_round"), ("Valuation", "valuation"),
             ("Revenue Model", "revenue_model"),
-        ]:
-            dp = financial_data.get(key, {})
-            lines.append(f"| {label} | {_truncate(dp.get('value', '—'))} | {_confidence_badge(dp.get('confidence', 'unknown'))} |")
-        lines.append("")
+        ], financial_data)
 
-        _fin_cols = [
-            ("Item",       lambda dp: _truncate(dp.get("value", "—"))),
-            ("Confidence", lambda dp: _confidence_badge(dp.get("confidence", "unknown"))),
-        ]
-        _fin_src = _fin_cols + [("Sources", lambda dp: ", ".join(dp.get("sources", [])[:2]) or "—")]
-        _render_list_as_table(lines, "Key Investors",           financial_data.get("key_investors", []),          _fin_cols)
-        _render_list_as_table(lines, "Key Customers",           financial_data.get("key_customers", []),          _fin_cols)
-        _render_list_as_table(lines, "Financial Risks",         financial_data.get("financial_risks", []),        _fin_src)
-        _render_list_as_table(lines, "Recent Financial Events", financial_data.get("recent_financial_events", []), _fin_src)
+        _render_list_as_table(lines, "Key Investors",           financial_data.get("key_investors", []),          _claim_cols)
+        _render_list_as_table(lines, "Key Customers",           financial_data.get("key_customers", []),          _claim_cols)
+        _render_list_as_table(lines, "Recent Financial Events", financial_data.get("recent_financial_events", []), _evidence_cols)
 
-    # Risk Section
+    # ── Group 5: Risk Detail ─────────────────────────────────────────────────
     if risk_data:
-        lines.append("---")
-        lines.append("")
-        lines.append("## Risk Assessment")
-        lines.append("")
+        _section("Risk Assessment")
         overall = risk_data.get("overall_risk_rating", {})
         lines.append(f"**Overall Risk Rating:** {overall.get('value', 'unknown').upper()} ({_confidence_badge(overall.get('confidence', 'unknown'))})")
         lines.append("")
@@ -439,14 +467,8 @@ def render_report_from_doc(doc: ReportDocument, output_dir: str = "outputs") -> 
         if summary.get("value") and summary["value"] != "unknown":
             lines.append(f"> {summary['value']}")
             lines.append("")
-        lines.append("_Severity = risk impact; Confidence = data reliability. Sorted by severity (most severe first)._")
-        lines.append("")
-        _risk_cols = [
-            ("Risk",       lambda dp: _truncate(dp.get("value", "—"))),
-            ("Severity",   lambda dp: _severity_badge(dp.get("severity", "")) or "—"),
-            ("Confidence", lambda dp: _confidence_badge(dp.get("confidence", "unknown"))),
-            ("Sources",    lambda dp: ", ".join(dp.get("sources", [])[:2]) or "—"),
-        ]
+        # Risk sub-tables are evidence tables: Item, Confidence, Sources.
+        # Severity stays in the data (used for sorting) but is not a column here.
         for label, key in [
             ("Regulatory Risks",    "regulatory_risks"),
             ("Legal Risks",         "legal_risks"),
@@ -458,29 +480,22 @@ def render_report_from_doc(doc: ReportDocument, output_dir: str = "outputs") -> 
         ]:
             items = risk_data.get(key, [])
             if items:
-                _render_list_as_table(lines, label, _sort_by_severity(items), _risk_cols)
+                _render_list_as_table(lines, label, _sort_by_severity(items), _evidence_cols)
 
-        # P3b: government contract exposure
+        # Financial Risks grouped with the rest of the risk content.
+        if financial_data:
+            _render_list_as_table(lines, "Financial Risks", financial_data.get("financial_risks", []), _evidence_cols)
+
         gce = risk_data.get("government_contract_exposure", {})
         if gce and gce.get("value") and gce["value"] not in ("unknown", ""):
             lines.append(f"**Federal Contract Exposure:** {gce['value']} ({_confidence_badge(gce.get('confidence', 'unknown'))})")
             lines.append("")
-        _render_list_as_table(
-            lines, "Notable Federal Contracts",
-            risk_data.get("notable_federal_contracts", []),
-            [
-                ("Contract",   lambda dp: _truncate(dp.get("value", "—"))),
-                ("Confidence", lambda dp: _confidence_badge(dp.get("confidence", "unknown"))),
-                ("Sources",    lambda dp: ", ".join(dp.get("sources", [])[:2]) or "—"),
-            ],
-        )
+        _render_list_as_table(lines, "Notable Federal Contracts",
+                              risk_data.get("notable_federal_contracts", []), _evidence_cols)
 
-    # Social Media Section
+    # ── Group 6: Social & Sentiment ──────────────────────────────────────────
     if social_media_data:
-        lines.append("---")
-        lines.append("")
-        lines.append("## Social Media & Sentiment")
-        lines.append("")
+        _section("Social Media & Sentiment")
         sentiment = social_media_data.get("overall_sentiment", {})
         lines.append(f"**Overall Sentiment:** {sentiment.get('value', 'unknown').upper()} ({_confidence_badge(sentiment.get('confidence', 'unknown'))})")
         lines.append("")
@@ -488,36 +503,14 @@ def render_report_from_doc(doc: ReportDocument, output_dir: str = "outputs") -> 
         if summary.get("value") and summary["value"] != "unknown":
             lines.append(f"> {summary['value']}")
             lines.append("")
-        lines.append("| Platform | Details | Confidence |")
-        lines.append("|----------|---------|------------|")
-        for label, key in [
+        _kv_rows([
             ("Twitter/X", "twitter_presence"), ("LinkedIn", "linkedin_presence"),
             ("Reddit", "reddit_sentiment"), ("Glassdoor", "glassdoor_rating"),
-        ]:
-            dp = social_media_data.get(key, {})
-            lines.append(f"| {label} | {_truncate(dp.get('value', '—'))} | {_confidence_badge(dp.get('confidence', 'unknown'))} |")
-        lines.append("")
-        _soc_cols = [
-            ("Item",       lambda dp: _truncate(dp.get("value", "—"))),
-            ("Confidence", lambda dp: _confidence_badge(dp.get("confidence", "unknown"))),
-            ("Sources",    lambda dp: ", ".join(dp.get("sources", [])[:2]) or "—"),
-        ]
-        _render_list_as_table(lines, "Notable Mentions",    social_media_data.get("notable_mentions", []),    _soc_cols)
-        _render_list_as_table(lines, "Trending Topics",     social_media_data.get("trending_topics", []),     _soc_cols)
-        _render_list_as_table(lines, "Customer Complaints", social_media_data.get("customer_complaints", []), _soc_cols)
-        _render_list_as_table(lines, "Positive Signals",    social_media_data.get("positive_signals", []),    _soc_cols)
-
-    # Gaps — from canonical doc, not re-derived
-    lines.append("---")
-    lines.append("")
-    lines.append("## Information Gaps")
-    lines.append("")
-    if doc.gaps:
-        for gap in doc.gaps:
-            lines.append(f"- **{gap.field}** ({gap.agent}): {gap.reason}")
-    else:
-        lines.append("- No critical gaps identified")
-    lines.append("")
+        ], social_media_data)
+        _render_list_as_table(lines, "Notable Mentions",    social_media_data.get("notable_mentions", []),    _evidence_cols)
+        _render_list_as_table(lines, "Trending Topics",     social_media_data.get("trending_topics", []),     _evidence_cols)
+        _render_list_as_table(lines, "Customer Complaints", social_media_data.get("customer_complaints", []), _evidence_cols)
+        _render_list_as_table(lines, "Positive Signals",    social_media_data.get("positive_signals", []),    _evidence_cols)
 
     # Methodology
     lines.append("---")
@@ -543,41 +536,22 @@ def render_report_from_doc(doc: ReportDocument, output_dir: str = "outputs") -> 
             )
         lines.append("")
 
-    # Tier coverage
-    if m.tier_attempts:
-        total_sources = sum(m.tier_attempts.values())
-        tier_parts = []
-        tier_display = {
-            "primary_document":    "Primary (Tier 0)",
-            "reputable_secondary": "Reputable (Tier 1)",
-            "aggregator":          "Aggregator (Tier 2)",
-            "community":           "Community (Tier 3)",
-            "unknown":             "Unknown (Tier ?)",
-        }
-        for tier_key in ("primary_document", "reputable_secondary", "aggregator", "community", "unknown"):
-            count = m.tier_attempts.get(tier_key, 0)
-            if count > 0:
-                pct = round(count / total_sources * 100)
-                tier_parts.append(f"{tier_display.get(tier_key, tier_key)}: {pct}%")
-        if tier_parts:
-            lines.append(f"**Source Tier Coverage:** {' · '.join(tier_parts)}")
-            lines.append("")
-
-    # EDGAR status
-    if m.edgar_lookup_status:
-        status = m.edgar_lookup_status
-        if status == "succeeded":
-            cik_str = f" (CIK: {m.edgar_cik})" if m.edgar_cik else ""
-            lines.append(f"**EDGAR:** ✓ succeeded{cik_str}")
-        elif status == "not_sec_reporting":
-            lines.append("**EDGAR:** – not SEC-reporting (private or non-US; expected)")
-        elif status == "lookup_failed":
-            lines.append("**EDGAR:** ⚠ lookup failed — financial data from EDGAR unavailable")
-        elif status == "rate_limited":
-            lines.append("**EDGAR:** ⚠ rate limited — financial data from EDGAR unavailable")
+    # Tier coverage (shared formatter — identical across HTML/PDF/Markdown)
+    tier_parts = tier_coverage_parts(m.tier_attempts)
+    if tier_parts:
+        lines.append(f"**Source Tier Coverage:** {' · '.join(tier_parts)}")
         lines.append("")
 
-    report = "\n".join(lines)
+    # EDGAR status (shared formatter)
+    _edgar = edgar_line(m.edgar_lookup_status, m.edgar_cik)
+    if _edgar:
+        label, _, rest = _edgar.partition(": ")
+        lines.append(f"**{label}:** {rest}")
+        lines.append("")
+
+    # House style: normalise em/en/etc. dashes to a single hyphen everywhere in
+    # the rendered output (markdown "---" table/divider syntax is unaffected).
+    report = strip_dashes("\n".join(lines))
 
     os.makedirs(output_dir, exist_ok=True)
     slug = doc.company_name.lower().replace(" ", "_").replace(".", "")

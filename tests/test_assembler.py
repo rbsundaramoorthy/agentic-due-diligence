@@ -1549,13 +1549,19 @@ def test_cap2_does_not_fire_on_non_financial_field():
     assert doc.research.description.confidence.value == "medium"
 
 
-def test_cap1b_high_unknown_forces_data_quality_low():
-    """Cap 1b: U >= 0.40 forces data_quality value to 'low'."""
-    # Create a report dominated by unknown sources (Apple-run scenario: U≈0.48)
+def test_cap1b_high_unknown_with_strong_primary_not_forced_low():
+    """Cap 1b: a high UNKNOWN (unclassified) share must NOT force data_quality low
+    when primary grounding is strong. Unknown is not a quality signal.
+
+    Apple-run scenario: U≈0.40 used to cliff the value to 'low'. With strong
+    primary grounding and no community/aggregator sources, the value must track
+    the evidence instead (here: 'high')."""
     data = _research_data()
-    # Add many unknown sources to push U above 0.40
-    data["description"]["sources"] = [f"https://unknown-blog-{i}.io/post" for i in range(5)]
-    data["founded_year"]["sources"] = ["https://another-unknown.biz/stripe"]
+    # 5 primary + 5 unknown → U=0.50 (high), P=0.50 (strong), W=0.
+    data["description"]["sources"] = (
+        ["https://data.sec.gov/xbrl/CIK1.json"] * 5
+        + [f"https://unknown-blog-{i}.io/post" for i in range(5)]
+    )
     synthesis = {
         "company_name": "Stripe",
         "executive_summary": {
@@ -1593,14 +1599,18 @@ def test_cap1b_high_unknown_forces_data_quality_low():
         },
     }
     doc = assemble_report(data, None, None, None, synthesis, _trace_summary())
-    # Verify U >= 0.40 so Cap 1b fires (unknown tier dominates)
+    # High unknown share, but it must NOT force the value down.
     u = doc.run_metadata.tier_coverage.get("unknown", 0.0)
+    p = (doc.run_metadata.tier_coverage.get("primary_document", 0.0)
+         + doc.run_metadata.tier_coverage.get("reputable_secondary", 0.0))
     assert u >= 0.40, f"Expected unknown share >= 0.40, got {u}"
-    assert doc.synthesis.data_quality.value == "low"
+    assert p >= 0.50, f"Expected primary+reputable >= 0.50, got {p}"
+    assert doc.synthesis.data_quality.value != "low", "unknown share must not force low"
+    assert doc.synthesis.data_quality.value == "high"
 
 
 def test_cap1b_low_unknown_high_primary_allows_high():
-    """Cap 1b: U < 0.20 AND P >= 0.50 → data_quality 'high' is allowed."""
+    """Cap 1b: P >= 0.50 with no community/aggregator sources → 'high' allowed."""
     # Build a report dominated by primary sources
     data = _research_data()
     data["description"]["sources"] = ["https://data.sec.gov/xbrl/CIK1.json"] * 6
@@ -1636,24 +1646,23 @@ def test_cap1b_low_unknown_high_primary_allows_high():
 
 
 def test_cap1b_medium_coverage_caps_to_medium():
-    """Cap 1b: mixed tier coverage → data_quality 'high' capped to 'medium'."""
-    # U < 0.40 but P < 0.50 → neither force-low nor high-eligible → medium
+    """Cap 1b: moderate primary, low weak share → 'high' capped to 'medium'.
+
+    P in [0.25, 0.50), W (community+aggregator) < 0.40 → neither force-low nor
+    high-eligible → medium. High unknown share present but irrelevant."""
     data = _research_data()
-    # Mix: 3 primary, 3 reputable, 4 unknown (U=0.4/10=0.40... no, we need U<0.40)
-    # 3 primary + 3 reputable + 3 unknown + 1 community = 10 sources
-    # U=0.3, P=0.6... that would allow "high". Let me try U=0.25, P=0.35
-    # 2 primary + 1 reputable = P=0.30, 3 unknown = U=0.30, 4 community
+    # 2 primary + 1 reputable (P=0.30), 2 community (W=0.20), 5 unknown (U=0.50)
     data["description"]["sources"] = [
         "https://www.sec.gov/filing",        # primary
         "https://www.sec.gov/filing2",       # primary
         "https://reuters.com/x",             # reputable
+        "https://reddit.com/1",              # community
+        "https://reddit.com/2",              # community
         "https://unknown1.io/",              # unknown
         "https://unknown2.io/",              # unknown
         "https://unknown3.io/",              # unknown
-        "https://reddit.com/1",              # community
-        "https://reddit.com/2",              # community
-        "https://reddit.com/3",              # community
-        "https://reddit.com/4",              # community
+        "https://unknown4.io/",              # unknown
+        "https://unknown5.io/",              # unknown
     ]
     synthesis = {
         "company_name": "Stripe",
@@ -1679,10 +1688,10 @@ def test_cap1b_medium_coverage_caps_to_medium():
     doc = assemble_report(data, None, None, None, synthesis, _trace_summary())
     p = (doc.run_metadata.tier_coverage.get("primary_document", 0.0)
          + doc.run_metadata.tier_coverage.get("reputable_secondary", 0.0))
-    u = doc.run_metadata.tier_coverage.get("unknown", 0.0)
-    # Verify preconditions: not force-low, not high-eligible → medium ceiling
-    assert u < 0.40
-    assert not (u < 0.20 and p >= 0.50)
+    w = (doc.run_metadata.tier_coverage.get("community", 0.0)
+         + doc.run_metadata.tier_coverage.get("aggregator", 0.0))
+    # Verify preconditions: not force-low (W<0.40, P>=0.25), not high (P<0.50) → medium
+    assert w < 0.40 and p >= 0.25 and p < 0.50
     assert doc.synthesis.data_quality.value == "medium"
 
 
@@ -1718,6 +1727,75 @@ def test_cap1b_never_raises_data_quality():
     }
     doc = assemble_report(data, None, None, None, synthesis, _trace_summary())
     assert doc.synthesis.data_quality.value == "low"
+
+
+def _synthesis_with_dq(value="high"):
+    """Minimal valid synthesis dict whose data_quality declares `value`."""
+    return {
+        "company_name": "Stripe",
+        "executive_summary": {
+            "value": "Summary.", "confidence": "high", "sources": [],
+            "synthesized_from": [], "reasoning": "Summary.",
+        },
+        "investment_recommendation": {
+            "value": "proceed", "confidence": "high", "sources": [],
+            "synthesized_from": [], "reasoning": "Good.",
+        },
+        "recommendation_rationale": {
+            "value": "Strong.", "confidence": "high", "sources": [],
+            "synthesized_from": [], "reasoning": "Solid.",
+        },
+        "key_strengths": [], "key_concerns": [], "red_flags": [],
+        "data_conflicts": [], "follow_up_questions": [],
+        "data_quality": {
+            "value": value, "confidence": "high", "sources": [],
+            "synthesized_from": [], "reasoning": "Assessment.",
+        },
+    }
+
+
+def test_cap1b_property_unknown_not_a_signal_but_weak_tiers_are():
+    """PROPERTY (the core fix): the data_quality floor responds to GENUINELY
+    low-quality shares (community/aggregator), not to the unclassified share.
+
+      Case A — high unknown + strong primary, no weak sources → NOT forced low.
+      Case B — high community/aggregator share          → DOES cap to low.
+
+    Before the fix (unknown>=0.40 force-low cliff, no weak-tier trigger) Case A
+    is wrongly forced 'low' and Case B is left 'medium'; both assertions fail.
+    After the fix both pass. This encodes the rule, not a snapshot of the label.
+    """
+    # ── Case A: high unknown (U=0.50), strong primary (P=0.50), W=0 ──────────
+    data_a = _research_data()
+    data_a["description"]["sources"] = (
+        ["https://data.sec.gov/xbrl/CIK1.json"] * 5
+        + [f"https://unclassified-{i}.io/x" for i in range(5)]
+    )
+    doc_a = assemble_report(data_a, None, None, None, _synthesis_with_dq("high"),
+                            _trace_summary())
+    tc_a = doc_a.run_metadata.tier_coverage
+    assert tc_a.get("unknown", 0) >= 0.40              # unknown dominates
+    assert (tc_a.get("community", 0) + tc_a.get("aggregator", 0)) == 0.0
+    assert doc_a.synthesis.data_quality.value != "low", (
+        "high unknown share with strong primary grounding must NOT be forced low"
+    )
+
+    # ── Case B: high weak share (community+aggregator = 0.50) ────────────────
+    data_b = _research_data()
+    data_b["description"]["sources"] = (
+        ["https://www.sec.gov/filing"] * 4          # P=0.40
+        + ["https://reddit.com/r/x"] * 3            # community
+        + ["https://crunchbase.com/org/y"] * 2      # aggregator
+        + ["https://unclassified.io/z"]             # unknown
+    )
+    doc_b = assemble_report(data_b, None, None, None, _synthesis_with_dq("high"),
+                            _trace_summary())
+    tc_b = doc_b.run_metadata.tier_coverage
+    w_b = tc_b.get("community", 0) + tc_b.get("aggregator", 0)
+    assert w_b >= 0.40, f"expected weak share >= 0.40, got {w_b}"
+    assert doc_b.synthesis.data_quality.value == "low", (
+        "high community/aggregator share must cap data_quality to low"
+    )
 
 
 def test_aggregates_recomputed_from_post_cap_claims():

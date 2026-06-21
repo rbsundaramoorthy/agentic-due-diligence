@@ -162,7 +162,16 @@ async def run_due_diligence(company_name: str, json_only: bool = False) -> Agent
     console.print("[bold]Phase 2:[/bold] Running Synthesis Agent...")
     console.print()
 
-    synthesis_agent = SynthesisAgent(tracer=tracer, client=client, db=agent_db)
+    # Synthesis makes ONE large generation (~130-170s for content-rich companies)
+    # rather than the many small calls the Phase 1 agents make, so the shared 120s
+    # per-request HTTP timeout is too tight: the call would time out and the SDK's
+    # retries would stack past the 300s agent budget (killing the run before any
+    # LLM call is even logged). Give synthesis a dedicated client whose HTTP
+    # timeout fits inside the 300s budget, with retries disabled so a genuine hang
+    # fails fast instead of stacking. Synthesis has no soft budget, so it may use
+    # the full window.
+    synthesis_client = anthropic.AsyncAnthropic(timeout=270.0, max_retries=0)
+    synthesis_agent = SynthesisAgent(tracer=tracer, client=synthesis_client, db=agent_db)
     synthesis_result = await _run_with_timeout(
         synthesis_agent,
         build_synthesis_task(

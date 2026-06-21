@@ -231,14 +231,22 @@ class BaseAgent(ABC):
             # Must be checked here, not after, to avoid API protocol violations:
             # if the previous turn returned tool_use, we must send tool_results
             # before removing tools.
-            _budget_exhausted = (
-                _max_tokens_truncated
-                or (
-                    self.soft_budget_seconds is not None
-                    and time.monotonic() - run_start >= self.soft_budget_seconds
-                )
+            # Two distinct budget conditions, deliberately NOT conflated:
+            #   • soft-budget cutoff = run was halted mid-work by the wall-clock
+            #     timer; tools removed and the model told to fill unknowns. This is
+            #     a genuinely PARTIAL outcome → drives _budget_forced (the status).
+            #   • max_tokens stickiness = an earlier turn truncated and we bumped to
+            #     a higher token budget; if the run then recovers to a clean terminal
+            #     emit it is COMPLETE, not partial → must NOT set _budget_forced.
+            # Both feed _budget_exhausted (tool removal + 8192 bump); only the soft
+            # cutoff feeds _budget_forced. Status is then derived from the terminal
+            # outcome, not from the mere presence of a max_tokens bump in history.
+            _soft_budget_hit = (
+                self.soft_budget_seconds is not None
+                and time.monotonic() - run_start >= self.soft_budget_seconds
             )
-            if _budget_exhausted:
+            _budget_exhausted = _max_tokens_truncated or _soft_budget_hit
+            if _soft_budget_hit:
                 _budget_forced = True
 
             effective_system = system_prompt

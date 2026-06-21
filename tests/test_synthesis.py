@@ -15,7 +15,13 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from src.agents.synthesis import SynthesisAgent, build_synthesis_task, _edgar_overlay_financial_dict
+from src.agents.synthesis import (
+    SynthesisAgent,
+    build_synthesis_task,
+    _edgar_overlay_financial_dict,
+    _slim_for_synthesis,
+    _trim_reasoning,
+)
 from src.observability.tracer import AgentTracer
 from src.observability.agent_db import AgentDB
 from src.schemas.models import CompanySynthesis, ConfidenceLevel, SeverityLevel
@@ -158,14 +164,144 @@ class TestBuildSynthesisTask:
         task = build_synthesis_task("Anthropic", None, None, None, None)
         assert "Anthropic" in task
 
-    def test_long_data_truncated(self):
+    def test_large_section_under_ceiling_passes_intact(self):
+        # A legitimately large structured section (under the 40k ceiling) must
+        # reach synthesis whole — not be silently clipped. Regression for the
+        # handoff (b) leak where the recovered risk section was cut at 8k chars.
         big_data = {"company_name": "TestCo", "description": {"value": "x" * 15000, "confidence": "high", "sources": []}}
         task = build_synthesis_task("TestCo", big_data, None, None, None)
-        # The research section should be truncated, not 15k chars long
+        assert "x" * 15000 in task, "full section value must pass intact"
+        assert "SECTION CLIPPED" not in task
+
+    def test_oversized_section_clip_is_explicit_not_silent(self):
+        # Only a pathological blowup past the ceiling clips — and it must announce
+        # the clip explicitly so synthesis knows the section is incomplete.
+        big_data = {"company_name": "TestCo", "description": {"value": "x" * 60000, "confidence": "high", "sources": []}}
+        task = build_synthesis_task("TestCo", big_data, None, None, None)
         research_section_start = task.find("== RESEARCH AGENT ==")
         financial_section_start = task.find("== FINANCIAL AGENT ==")
         research_section = task[research_section_start:financial_section_start]
-        assert len(research_section) < 10000
+        assert "SECTION CLIPPED" in research_section, "clip must be explicit, not silent"
+        assert "INCOMPLETE" in research_section
+
+    def test_recovered_risk_section_reaches_synthesis_intact(self):
+        # Handoff (b): a truncated-then-recovered risk agent result (full, ~27k
+        # chars with all category lists) must reach the synthesis prompt WHOLE —
+        # every list field present, no silent clip. Before the fix (8k cap) the
+        # tail categories were dropped silently.
+        def _dp(value):
+            return {"value": value, "confidence": "high", "sources": [], "reasoning": "x" * 200}
+
+        risk_data = {
+            "company_name": "TestCo",
+            "overall_risk_rating": _dp("high"),
+            "risk_summary": _dp("Multi-front risk profile across regulatory and legal axes."),
+            "regulatory_risks": [_dp(f"Regulatory item {i}") for i in range(3)],
+            "legal_risks": [_dp(f"Legal item {i}") for i in range(4)],
+            "cybersecurity_risks": [_dp(f"Cyber item {i}") for i in range(3)],
+            "operational_risks": [_dp(f"Operational item {i}") for i in range(3)],
+            "reputational_risks": [_dp(f"Reputational item {i}") for i in range(3)],
+            "esg_risks": [_dp(f"ESG item {i}") for i in range(3)],
+            "pending_litigation": [_dp(f"Litigation case {i}: Plaintiff v. TestCo") for i in range(10)],
+            "government_contract_exposure": _dp("No material federal contract exposure identified."),
+            "notable_federal_contracts": [],
+        }
+        # The fixture must exceed the OLD 8k cap to be a meaningful regression.
+        assert len(json.dumps(risk_data, indent=2)) > 8000
+
+        task = build_synthesis_task("TestCo", None, None, risk_data, None)
+        risk_start = task.find("== RISK AGENT ==")
+        social_start = task.find("== SOCIAL MEDIA AGENT ==")
+        risk_section = task[risk_start:social_start]
+
+        # No silent clip, and every category — including the tail ones the old
+        # cap dropped — is present in the synthesis input.
+        assert "SECTION CLIPPED" not in risk_section
+        for field in (
+            "cybersecurity_risks", "operational_risks", "reputational_risks",
+            "esg_risks", "pending_litigation", "government_contract_exposure",
+        ):
+            assert field in risk_section, f"{field} must reach synthesis intact"
+        # The last litigation case (tail of the largest list) must survive.
+        assert "Litigation case 9" in risk_section
+
+    def test_slim_view_preserves_claim_ids_and_values_drops_urls(self):
+        """PROPERTY: the slim synthesis view preserves every claim_id and every
+        value in full, drops all source URLs, and never mutates the input.
+
+        Fails if any claim_id is dropped or any value is altered — this is a
+        structural property, not a byte snapshot of the new slim output.
+        """
+        import copy
+
+        def _dp(value, cid, urls):
+            return {
+                "value": value, "confidence": "high",
+                "sources": urls,
+                "reasoning": "Apple is the named defendant in this matter. " * 3,
+                "severity": "high", "_claim_id": cid,
+            }
+
+        section = {
+            "company_name": "TestCo",  # plain scalar, not a claim
+            "overall_risk_rating": _dp("high", "ridtop99999999",
+                                       ["https://example.com/a", "https://court.gov/d/1"]),
+            "pending_litigation": [
+                _dp(f"Case {i}: Plaintiff v. TestCo", f"cid{i:010d}",
+                    [f"https://courtlistener.com/docket/{i}"])
+                for i in range(6)
+            ],
+            "notable_federal_contracts": [],  # empty list must survive as empty
+        }
+        original = copy.deepcopy(section)
+
+        def collect(obj, ids, vals, urls):
+            if isinstance(obj, dict):
+                if "value" in obj and "confidence" in obj:
+                    if obj.get("_claim_id"):
+                        ids.add(obj["_claim_id"])
+                    vals.append(obj["value"])
+                    for u in obj.get("sources") or []:
+                        if isinstance(u, str) and u.startswith("http"):
+                            urls.add(u)
+                for v in obj.values():
+                    collect(v, ids, vals, urls)
+            elif isinstance(obj, list):
+                for v in obj:
+                    collect(v, ids, vals, urls)
+
+        full_ids, full_vals, full_urls = set(), [], set()
+        collect(section, full_ids, full_vals, full_urls)
+        assert len(full_ids) == 7 and len(full_urls) == 8  # fixture sanity
+
+        slim = _slim_for_synthesis(section)
+        slim_ids, slim_vals, slim_urls = set(), [], set()
+        collect(slim, slim_ids, slim_vals, slim_urls)
+
+        # PROPERTY 1: every claim_id preserved — no category/item dropped.
+        assert slim_ids == full_ids, "slim view dropped a claim_id"
+        # PROPERTY 2: every value preserved in full (verbatim).
+        assert sorted(slim_vals) == sorted(full_vals), "slim view altered a value"
+        # PROPERTY 3: no source URL survives anywhere in the slim serialization.
+        blob = json.dumps(slim)
+        for u in full_urls:
+            assert u not in blob, f"source URL leaked into slim view: {u}"
+        assert slim_urls == set()
+        # PROPERTY 4: non-mutation — the original (what the report is built from)
+        # is byte-for-byte unchanged, so the final report cannot change.
+        assert section == original, "slimming mutated the input data"
+
+    def test_trim_reasoning_is_sentence_aware_no_midword_cut(self):
+        long = ("First sentence is here. Second sentence continues the thought. "
+                "Third sentence adds even more detail to push past the limit. " * 10)
+        trimmed = _trim_reasoning(long, limit=120)
+        assert len(trimmed) <= 140  # limit + ellipsis slack
+        # No mid-word cut: the trimmed body ends at a word/sentence boundary.
+        body = trimmed.rstrip(" …")
+        assert body == body.rstrip() and not body.endswith("-")
+        assert long[: len(body)] == body  # prefix of the original, unaltered
+        # Short reasoning is returned unchanged.
+        assert _trim_reasoning("Short.", limit=120) == "Short."
 
 
 # ── SynthesisAgent Config Tests ───────────────────────────────────

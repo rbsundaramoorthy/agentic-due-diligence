@@ -98,6 +98,65 @@ OUTPUT_SCHEMA = """{
 }"""
 
 
+# Reasoning is kept generous — the big savings come from dropping source-URL
+# arrays and indentation, not from cutting reasoning. Most reasoning strings are
+# well under this; only unusually long ones are trimmed (sentence-aware).
+_MAX_REASONING_CHARS = 500
+
+
+def _trim_reasoning(text: str, limit: int = _MAX_REASONING_CHARS) -> str:
+    """Trim reasoning to ~limit chars without cutting mid-word.
+
+    Prefers a sentence boundary (. ! ?) at or before the limit; falls back to the
+    last whitespace boundary. Appends an ellipsis so the trim is visible. Returns
+    the text unchanged when already within the limit.
+    """
+    if not isinstance(text, str) or len(text) <= limit:
+        return text
+    window = text[:limit]
+    # Prefer the last sentence terminator in the window.
+    cut = max(window.rfind(". "), window.rfind("! "), window.rfind("? "))
+    if cut >= int(limit * 0.5):
+        return text[: cut + 1] + " …"
+    # Otherwise fall back to the last word boundary (never mid-word).
+    space = window.rfind(" ")
+    if space > 0:
+        return text[:space] + " …"
+    return window + " …"
+
+
+def _slim_for_synthesis(obj: object) -> object:
+    """Return a slim COPY of an agent-output structure for the synthesis input.
+
+    For every DataPoint-shaped dict (has "value" and "confidence"), keep value in
+    full, plus confidence, _claim_id and severity; DROP the source-URL array; trim
+    reasoning sentence-aware. The field identity is preserved by the surrounding
+    dict key, and every list item is preserved — no claim or category is dropped.
+
+    Source URLs are safe to omit here: synthesis cites _claim_ids (not URLs) in
+    synthesized_from, and the assembler attaches the real sources to the final
+    report from the original section data, independently of this view.
+
+    This function never mutates its input — the original dict the assembler builds
+    the canonical report from is left untouched, so the final report is identical.
+    """
+    if isinstance(obj, dict):
+        if "value" in obj and "confidence" in obj:
+            slim: dict = {"value": obj["value"], "confidence": obj["confidence"]}
+            if obj.get("_claim_id"):
+                slim["_claim_id"] = obj["_claim_id"]
+            if obj.get("severity") is not None:
+                slim["severity"] = obj["severity"]
+            reasoning = obj.get("reasoning")
+            if reasoning:
+                slim["reasoning"] = _trim_reasoning(reasoning)
+            return slim
+        return {k: _slim_for_synthesis(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_slim_for_synthesis(v) for v in obj]
+    return obj
+
+
 def build_synthesis_task(
     company_name: str,
     research_data: Optional[dict],
@@ -108,8 +167,17 @@ def build_synthesis_task(
 ) -> str:
     """Build the task prompt for the synthesis agent.
 
-    Serializes all agent outputs into a single message. Each section is
-    capped at 8,000 chars to stay within context budget while preserving detail.
+    Each section is passed as a SLIM, compact view (see _slim_for_synthesis):
+    every item and _claim_id is preserved and every value is kept in full, but
+    source-URL arrays are dropped and reasoning is trimmed sentence-aware, then
+    serialized without indentation. This keeps the full risk/litigation/ESG
+    content reaching synthesis while keeping the input small enough to stay in
+    the healthy latency band — a verbose 40k-char-per-section view (indent + URLs)
+    ballooned the input and timed synthesis out. A 40,000-char ceiling remains as
+    a loud backstop: if a slim section still overruns it the clip is announced
+    explicitly, never dropped silently. Slimming affects ONLY what synthesis
+    reads — the canonical report is built from the original, untouched section
+    data, so nothing in the final report changes.
     """
     # Show synthesis the EDGAR-merged financial state rather than the pre-merge
     # deferrals that the financial agent returns for US public companies.  This
@@ -117,12 +185,22 @@ def build_synthesis_task(
     # data_quality and data_conflicts reflect the FINAL report state.
     financial_for_synthesis = _edgar_overlay_financial_dict(financial_data, edgar_data)
 
-    def _format(data: Optional[dict], max_chars: int = 8000) -> str:
+    def _format(data: Optional[dict], max_chars: int = 40000) -> str:
         if data is None:
             return "(agent did not complete successfully — treat as unavailable)"
-        serialized = json.dumps(data, indent=2)
+        slim = _slim_for_synthesis(data)
+        serialized = json.dumps(slim, separators=(",", ":"))
         if len(serialized) > max_chars:
-            return serialized[:max_chars] + "\n... [truncated]"
+            omitted = len(serialized) - max_chars
+            # Explicit, not silent: a clipped section must announce it is
+            # incomplete so synthesis does not treat the visible items as the
+            # whole picture (and so the gap is auditable, not invisible).
+            return (
+                serialized[:max_chars]
+                + f"\n... [SECTION CLIPPED: {omitted} chars omitted to fit the "
+                f"{max_chars}-char synthesis input ceiling. This section is "
+                f"INCOMPLETE — items beyond this point were not provided.]"
+            )
         return serialized
 
     def _format_edgar_summary(data: Optional[dict]) -> str:

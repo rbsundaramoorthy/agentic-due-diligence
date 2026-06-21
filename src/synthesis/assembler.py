@@ -253,10 +253,14 @@ _HIGH_ELIGIBLE_TIERS: frozenset = frozenset({
     SourceTier.REPUTABLE_SECONDARY,
 })
 
-# Cap 1b thresholds (U = unknown share, P = primary+reputable share).
-_CAP1B_UNKNOWN_FORCE_LOW: float  = 0.40  # U >= → force data_quality to "low"
-_CAP1B_PRIMARY_FORCE_LOW: float  = 0.25  # P <  → force data_quality to "low"
-_CAP1B_UNKNOWN_HIGH_MAX:  float  = 0.20  # U <  required for "high" data_quality
+# Cap 1b thresholds. data_quality is judged on GENUINELY low-quality signals
+# only: W = community + aggregator share, P = primary_document + reputable_secondary
+# share. The UNKNOWN (unclassified) share is deliberately NOT a quality signal — a
+# source we could not classify is not the same as a low-quality source — so it never
+# forces data_quality down, and it never blocks "high" when primary grounding is strong.
+_CAP1B_WEAK_FORCE_LOW: float     = 0.40  # W (community+aggregator) >= → force "low"
+_CAP1B_PRIMARY_FORCE_LOW: float  = 0.25  # P (primary+reputable)     <  → force "low"
+_CAP1B_WEAK_HIGH_MAX:  float     = 0.20  # W <  required for "high" data_quality
 _CAP1B_PRIMARY_HIGH_MIN:  float  = 0.50  # P >= required for "high" data_quality
 
 # Cap 2 material financial fields (quantitative dollar/pct figures).
@@ -397,21 +401,28 @@ def _apply_cap1b(
 ) -> Optional["Claim"]:
     """Apply Cap 1b: cap the data_quality VALUE based on tier_coverage shares.
 
-    U = unknown share; P = primary_document + reputable_secondary share.
+    W = community + aggregator share (genuinely low-quality sources);
+    P = primary_document + reputable_secondary share (strong grounding).
     Ceiling logic:
-      "high"  allowed ONLY IF U < _CAP1B_UNKNOWN_HIGH_MAX AND P >= _CAP1B_PRIMARY_HIGH_MIN
-      "low"   forced   IF U >= _CAP1B_UNKNOWN_FORCE_LOW OR P < _CAP1B_PRIMARY_FORCE_LOW
+      "low"   forced   IF W >= _CAP1B_WEAK_FORCE_LOW OR P < _CAP1B_PRIMARY_FORCE_LOW
+      "high"  allowed  IF P >= _CAP1B_PRIMARY_HIGH_MIN AND W < _CAP1B_WEAK_HIGH_MAX
       otherwise "medium"
-    Only lowers the VALUE — never raises it.
+
+    The UNKNOWN (unclassified) tier share plays NO role: it is not a quality
+    signal, so it neither forces the value down nor blocks "high". The floor is
+    based only on genuinely low-quality shares (community/aggregator) and weak
+    primary grounding, so the label cannot be dragged below what the
+    primary/reputable evidence supports. Only lowers the VALUE — never raises it.
     """
     if data_quality_claim is None:
         return None
-    u = tier_coverage.get("unknown", 0.0)
+    w = (tier_coverage.get("community", 0.0)
+         + tier_coverage.get("aggregator", 0.0))
     p = (tier_coverage.get("primary_document", 0.0)
          + tier_coverage.get("reputable_secondary", 0.0))
-    if u >= _CAP1B_UNKNOWN_FORCE_LOW or p < _CAP1B_PRIMARY_FORCE_LOW:
+    if w >= _CAP1B_WEAK_FORCE_LOW or p < _CAP1B_PRIMARY_FORCE_LOW:
         ceiling = "low"
-    elif u < _CAP1B_UNKNOWN_HIGH_MAX and p >= _CAP1B_PRIMARY_HIGH_MIN:
+    elif p >= _CAP1B_PRIMARY_HIGH_MIN and w < _CAP1B_WEAK_HIGH_MAX:
         ceiling = "high"
     else:
         ceiling = "medium"

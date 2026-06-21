@@ -892,6 +892,51 @@ class TestSoftBudget:
         )
 
     @pytest.mark.asyncio
+    async def test_status_reflects_terminal_outcome_not_budget_history(self):
+        """Status must derive from the terminal outcome, not from whether any
+        intermediate turn was budget-forced.
+
+          • max_tokens bump → recovered to a clean end_turn emit  → COMPLETE
+          • soft-budget cutoff (run halted mid-work)              → PARTIAL
+
+        Before the fix, _budget_forced was set on ANY budget exhaustion (including
+        the max_tokens stickiness), so the recovered run was mislabeled partial.
+        This test fails before the fix (recovery returns partial) and passes after.
+        """
+        # ── Arm 1: max_tokens bump then clean recovery → complete ──────────────
+        client = make_mock_client()
+        client.messages.create.side_effect = [
+            _make_truncated_response('{"company_name": "TestCo", "descrip'),
+            _make_text_response(json.dumps(VALID_RESEARCH_JSON)),
+        ]
+        agent = ResearchAgent(tracer=make_tracer(), client=client)
+        agent.soft_budget_seconds = None  # only the max_tokens bump occurred
+
+        recovered = await agent.run("Research TestCo")
+        assert recovered["status"] == "complete", (
+            "a max_tokens bump that recovered to a clean terminal emit is complete, "
+            "not partial — the mere presence of a bump must not imply partial"
+        )
+        assert recovered["data"]["company_name"] == "TestCo"
+        assert recovered["gaps"] == [], (
+            "a recovered-complete run must not carry a budget-reached gap"
+        )
+
+        # ── Arm 2: soft-budget cutoff (no clean mid-work completion) → partial ──
+        client2 = make_mock_client()
+        client2.messages.create.return_value = _make_text_response(
+            json.dumps(VALID_RESEARCH_JSON)
+        )
+        agent2 = ResearchAgent(tracer=make_tracer(), client=client2)
+        agent2.soft_budget_seconds = 0  # timer fires at turn 0 → genuine cutoff
+
+        cutoff = await agent2.run("Research TestCo")
+        assert cutoff["status"] == "partial", (
+            "a soft-budget cutoff halts the run mid-work and must stay partial"
+        )
+        assert any("budget" in g.lower() for g in cutoff["gaps"])
+
+    @pytest.mark.asyncio
     async def test_no_budget_completes_normally(self):
         """Without soft_budget_seconds, a successful run returns status=complete."""
         client = make_mock_client()

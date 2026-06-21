@@ -112,7 +112,7 @@ stateDiagram-v2
 This is the path every fact takes, and the reason a report is trustworthy. A claim is born with a source tier and a confidence bounded by that tier, synthesis cites it by id, and the assembler refuses to ship any synthesized claim whose lineage does not resolve.
 
 ```mermaid
-flowchart TD
+flowchart LR
     A["Agent emits a claim"] --> B["Assign claim_id<br/>attach source tier<br/>confidence bounded by tier"]
     B --> SY["Synthesis builds higher-order claims<br/>each cites upstream via synthesized_from"]
     SY --> V{"Does each synthesized_from<br/>resolve to a real claim_id?"}

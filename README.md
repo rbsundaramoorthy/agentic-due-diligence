@@ -196,7 +196,7 @@ all move). The committed files come from one specific run, so what you read matc
 the system actually produced:
 
 - **Run:** 2026-06-21 02:27 EDT
-- **Commit:** c87435c5039a5b6faf000f47611275e861593450
+- **Commit:** 04e46d6fb16d288ebc2fcd12de24216d90175e08
 - **Run cost / time:** $1.25, 331s, 26 LLM calls, 31 tool calls
 - **EDGAR ground-truth:** matched (CIK 0000320193)
 

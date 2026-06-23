@@ -77,7 +77,7 @@ OUTPUT_SCHEMA = """{
 
 class RiskAgent(WebSearchMixin):
     AGENT_NAME = "risk"
-    PROMPT_VERSION = "2.2"
+    PROMPT_VERSION = "2.3"
 
     def get_tools(self) -> list:
         return [_SAMGOV_TOOL, _COURTLISTENER_TOOL, _WEB_SEARCH_TOOL, _WEB_FETCH_TOOL]
@@ -211,6 +211,19 @@ When you have gathered enough information, respond with ONLY a JSON object
 matching this exact schema (no markdown, no backticks, no explanation):
 
 {OUTPUT_SCHEMA}
+
+OUTPUT SIZE — keep the report focused and bounded (a sprawling company can have a
+huge risk surface; do NOT enumerate it exhaustively):
+- Per risk category (regulatory, legal, cybersecurity, operational, reputational,
+  ESG): list AT MOST the 5 most material items, most severe first. Consolidate or
+  drop lesser items rather than listing everything.
+- pending_litigation: list AT MOST the 6 most significant cases (highest severity
+  / most material), most severe first. A company may have thousands of dockets —
+  do NOT try to list them all; state the total docket count in the most relevant
+  item's value and report only the most significant cases.
+- Keep every "value" to one sentence and every "reasoning" to one short sentence.
+  Be specific, but do not pad. For CourtListener cases the one-sentence reasoning
+  must still name the parties and the company's role (see the attribution rules).
 
 TOOL CALL BUDGET:
 You MUST complete your research within 6 tool calls. After your 5th call,

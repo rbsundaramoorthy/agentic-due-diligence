@@ -70,10 +70,15 @@ async def run_due_diligence(company_name: str, json_only: bool = False) -> Agent
     )
     console.print()
 
-    # Initialize shared components
-    # 120s per-request HTTP timeout: above the p99 observed LLM response time (~82s)
-    # but well below the 300s hard agent timeout, so hung API calls surface quickly.
-    client = anthropic.AsyncAnthropic(timeout=120.0)
+    # Initialize shared components.
+    # 240s per-request HTTP timeout (classifier + Phase-1 agents): a content-rich
+    # agent's single final-JSON emit (up to 8192 tokens) can run ~150s. At the old
+    # 120s timeout those emits were cut mid-stream and the SDK's retries then
+    # stacked past the 300s hard agent budget (observed: a GOOGLE risk run timed
+    # out). 240s sits above the worst single-call latency yet under the 300s hard
+    # timeout, so a large emit completes in one attempt while genuine hangs still
+    # surface via the agent's wait_for. (Synthesis keeps its own dedicated client.)
+    client = anthropic.AsyncAnthropic(timeout=240.0)
     tracer = AgentTracer(company_name)
     os.makedirs("outputs", exist_ok=True)
     agent_db = AgentDB(db_path="outputs/agent_log.db")

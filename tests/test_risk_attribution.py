@@ -163,8 +163,8 @@ class TestRiskAgentPromptContent:
     def setup_method(self):
         self.agent = RiskAgent(tracer=_make_tracer(), client=MagicMock())
 
-    def test_prompt_version_is_2_2(self):
-        assert self.agent.PROMPT_VERSION == "2.2"
+    def test_prompt_version_is_2_3(self):
+        assert self.agent.PROMPT_VERSION == "2.3"
 
     def test_prompt_contains_party_membership_check(self):
         prompt = self.agent.get_system_prompt()

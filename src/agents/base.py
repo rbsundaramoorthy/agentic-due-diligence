@@ -118,7 +118,13 @@ class BaseAgent(ABC):
     PROMPT_VERSION: str = "1.0"
     MAX_RETRIES: int = 3
     MAX_TURNS: int = 10  # Max tool-use turns before forcing completion
-    DEFAULT_MAX_TOKENS: int = 4096
+    # 8192 gives the final structured-JSON emit enough headroom for content-rich
+    # companies (e.g. a risk profile with many litigation/regulatory items). At
+    # 4096 those emits truncated mid-JSON (stop_reason=max_tokens), forcing a
+    # retry that, for large companies, could not recover within the agent budget.
+    # max_tokens is a CAP, not a charge — smaller emits are unaffected and cost
+    # is unchanged.
+    DEFAULT_MAX_TOKENS: int = 8192
 
     def __init__(
         self,

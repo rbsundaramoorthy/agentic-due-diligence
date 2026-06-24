@@ -14,6 +14,7 @@ from urllib.parse import urlparse
 from src.schemas.models import Claim, ConfidenceLevel, ReportDocument, SeverityLevel
 from src.synthesis.assembler import assemble_report, build_render_dicts
 from src.synthesis.render_common import (
+    OVERALL_NOT_COMPUTABLE,
     disclaimer_sentences,
     edgar_line,
     format_generated_et,
@@ -344,9 +345,11 @@ def render_report_from_doc(doc: ReportDocument, output_dir: str = "outputs") -> 
         for label, key in [("Research", "research"), ("Financial", "financial"),
                            ("Risk", "risk"), ("Social Media", "social_media"),
                            ("Synthesis", "synthesis")]:
-            if sc and key in sc:
-                sec_parts.append(f"{label} {sc[key]:.0f}%")
-            elif not sc:
+            if sc:
+                # Represent a missing section honestly as n/a (never fabricate a
+                # confidence); a missing weighted section already lowered Overall.
+                sec_parts.append(f"{label} {sc[key]:.0f}%" if key in sc else f"{label} n/a")
+            else:
                 section = getattr(doc, key, None)
                 if section is not None:
                     sec_parts.append(f"{label} {_section_confidence_from_doc(section)*100:.0f}%")
@@ -358,6 +361,10 @@ def render_report_from_doc(doc: ReportDocument, output_dir: str = "outputs") -> 
                 "_Overall is a weighted blend of Financial and Risk (40% each) and "
                 "Social Media (20%); Research and Synthesis are reported but not weighted._"
             )
+    else:
+        # Overall is UNDEFINED (no weighted section scorable). Show it honestly —
+        # never 0%, never a blank/omitted line.
+        lines.append(f"**Overall Confidence:** {OVERALL_NOT_COMPUTABLE}")
     lines.append("")
 
     # ── Disclaimer (prominent, near the top) ─────────────────────────────────

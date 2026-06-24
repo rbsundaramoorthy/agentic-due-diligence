@@ -399,6 +399,67 @@ def test_pdf_renders_nonempty():
         assert os.path.getsize(pdf_path) > 1000
 
 
+# ── Overall confidence = None ("not computable") rendering ─────────────────────
+
+def _doc_overall_none():
+    """A doc with NO weighted section (only research present) → overall is None."""
+    research = annotate_claim_ids({
+        "company_name": "Acme",
+        "description": _dp("A company"),
+        "founded_year": _dp("2001"), "headquarters": _dp("NYC"),
+        "employee_count": _dp("100"), "industry": _dp("Tech"),
+        "website": _dp("https://acme.com"),
+        "key_products": [], "key_leadership": [], "technology_stack": [],
+        "recent_developments": [], "notable_patents": [],
+    })
+    ts = {"trace_id": "t", "total_cost_usd": 0.1, "total_duration_ms": 1000,
+          "total_llm_calls": 1, "total_tool_calls": 0,
+          "total_input_tokens": 10, "total_output_tokens": 5, "by_agent": {}}
+    doc = assemble_report(research, None, None, None, None, ts)
+    assert doc.run_metadata.overall_confidence is None  # precondition for these tests
+    return doc
+
+
+_NOT_COMPUTABLE = "not computable (no weighted section available)"
+
+
+def test_overall_none_markdown_is_explicit_not_blank_or_zero():
+    with tempfile.TemporaryDirectory() as d:
+        md = render_report_from_doc(_doc_overall_none(), d)
+    # The overall line is PRESENT and explicit, never omitted.
+    assert "**Overall Confidence:**" in md
+    assert _NOT_COMPUTABLE in md
+    # Never rendered as 0% (the failure this guards against).
+    assert "Overall Confidence:** 0%" not in md and "Overall Confidence: 0%" not in md
+
+
+def test_overall_none_html_is_explicit_not_blank_or_zero():
+    with tempfile.TemporaryDirectory() as d:
+        html_path, _ = render_pdf_report_from_doc(_doc_overall_none(), d)
+        html = open(html_path).read()
+    assert "Overall Confidence" in html            # not omitted
+    assert _NOT_COMPUTABLE in html
+    assert ">Overall Confidence: 0%" not in html   # not zero
+
+
+def test_overall_none_pdf_renders_without_error():
+    with tempfile.TemporaryDirectory() as d:
+        _, pdf_path = render_pdf_report_from_doc(_doc_overall_none(), d)
+        assert os.path.getsize(pdf_path) > 1000
+
+
+def test_overall_present_regression_still_numeric():
+    """At-least-one-present: a numeric overall still renders with a % badge and the
+    weighting note — the not-computable branch must not affect healthy reports."""
+    with tempfile.TemporaryDirectory() as d:
+        md = render_report_from_doc(_full_doc(), d)
+        html_path, _ = render_pdf_report_from_doc(_full_doc(), d)
+        html = open(html_path).read()
+    assert _NOT_COMPUTABLE not in md and _NOT_COMPUTABLE not in html
+    assert "**Overall Confidence:**" in md and "%" in md.split("**Overall Confidence:**")[1][:40]
+    assert "Overall Confidence:" in html and "reported but not weighted" in html
+
+
 # ── Source-link helpers ───────────────────────────────────────────────────────
 
 def test_clean_source_label_domain_or_source():

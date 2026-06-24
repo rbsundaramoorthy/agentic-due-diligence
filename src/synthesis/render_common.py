@@ -43,6 +43,13 @@ def strip_dashes(text) -> str:
     return str(text).translate(_DASH_TABLE)
 
 
+# ── Overall-confidence "not computable" state ─────────────────────────────────
+# Shown when overall confidence is None (no weighted section was scorable). None
+# means "no basis to score" — UNDEFINED — which is NOT 0% and must never render as
+# 0% or a blank/omitted line. Kept here so md / html / pdf phrase it identically.
+OVERALL_NOT_COMPUTABLE = "not computable (no weighted section available)"
+
+
 # ── Disclaimer + verification caveat ──────────────────────────────────────────
 
 # One generic statement about what the confidence labels mean (NOT per-claim).

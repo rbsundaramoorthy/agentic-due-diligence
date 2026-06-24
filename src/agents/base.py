@@ -11,6 +11,7 @@ This mirrors the Configuration-as-Code framework from TIAA, where every
 pipeline stage had explicit states, transitions, and validation checkpoints.
 """
 
+import asyncio
 import json
 import time
 from abc import ABC, abstractmethod
@@ -125,6 +126,14 @@ class BaseAgent(ABC):
     # max_tokens is a CAP, not a charge — smaller emits are unaffected and cost
     # is unchanged.
     DEFAULT_MAX_TOKENS: int = 8192
+    # Budget-aware retries for genuinely FAST transient API errors (rate limits,
+    # 5xx, connection blips). Phase-1 runs 5 agents in parallel (higher transient
+    # exposure), and the per-request HTTP timeout (240s) is most of the 300s agent
+    # budget, so the SDK's budget-blind retry would stack a second full-timeout
+    # attempt that the budget cuts mid-flight. We disable SDK retries on that
+    # client and retry here instead — only while working time remains, and never
+    # for timeouts (which have already consumed the budget).
+    MAX_TRANSIENT_RETRIES: int = 2
 
     def __init__(
         self,
@@ -140,6 +149,7 @@ class BaseAgent(ABC):
         self.state = AgentState.PLANNING
         self.messages: List[dict] = []
         self.retries = 0
+        self._transient_retries = 0
         self.soft_budget_seconds: Optional[float] = None
 
     def _format_context(self) -> str:
@@ -328,6 +338,35 @@ class BaseAgent(ABC):
             except Exception as e:
                 self.tracer.end_span(span, error=str(e))
                 self.tracer.log_error(self.AGENT_NAME, str(e))
+
+                # Budget-aware retry for FAST transient errors only. A timeout
+                # (APITimeoutError, a subclass of APIConnectionError) has already
+                # consumed ~one full per-request window, so retrying it would stack
+                # a second attempt the hard budget cuts mid-flight — never retry it.
+                # Rate limits / 5xx / connection blips fail fast, so a bounded retry
+                # fits when working time remains.
+                _is_transient = (
+                    isinstance(e, (anthropic.RateLimitError,
+                                   anthropic.InternalServerError,
+                                   anthropic.APIConnectionError))
+                    and not isinstance(e, anthropic.APITimeoutError)
+                )
+                _budget_left = (
+                    self.soft_budget_seconds is None
+                    or (time.monotonic() - run_start) < self.soft_budget_seconds
+                )
+                if _is_transient and _budget_left and self._transient_retries < self.MAX_TRANSIENT_RETRIES:
+                    self._transient_retries += 1
+                    if self.db:
+                        self.db.log_llm_call(
+                            agent=self.AGENT_NAME, turn=turn, model=self.MODEL,
+                            system_prompt=system_prompt, request_messages=self.messages,
+                            error=f"transient retry {self._transient_retries}/{self.MAX_TRANSIENT_RETRIES}: {e}",
+                            trace_id=trace_id,
+                        )
+                    await asyncio.sleep(min(2 ** self._transient_retries, 5))
+                    continue  # re-issue the same request; bounded and within budget
+
                 if self.db:
                     self.db.log_llm_call(
                         agent=self.AGENT_NAME, turn=turn, model=self.MODEL,
@@ -346,7 +385,7 @@ class BaseAgent(ABC):
                 return {
                     "status": "failed",
                     "data": None,
-                    "gaps": ["LLM call failed"],
+                    "gaps": [f"{self.AGENT_NAME} agent failed: {type(e).__name__}"],
                     "error_summary": str(e),
                 }
 

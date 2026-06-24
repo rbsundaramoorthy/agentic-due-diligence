@@ -956,6 +956,106 @@ class TestSoftBudget:
         assert "tools" in call_kwargs
 
 
+# ── Timeout-safety & budget-aware transient retry ──────────────────
+
+import httpx
+import anthropic
+
+
+def _req():
+    return httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+
+
+class TestTransientRetryAndTimeoutSafety:
+    """A Phase-1 emit that overruns the per-request timeout must degrade LOUDLY
+    (status=failed, data=None, error recorded) in BOUNDED attempts — never stack a
+    second full-timeout attempt — while genuinely fast transient errors still get a
+    bounded, budget-aware retry.
+    """
+
+    @pytest.mark.asyncio
+    async def test_timeout_fails_loud_single_attempt(self):
+        """A timeout (APITimeoutError) is NOT retried — one attempt, loud failure.
+
+        Retrying a timeout would stack a second ~240s attempt the 300s budget cuts
+        mid-flight, recording a silent null. Instead it fails loudly and at once.
+        """
+        client = make_mock_client()
+        client.messages.create.side_effect = anthropic.APITimeoutError(request=_req())
+        agent = ResearchAgent(tracer=make_tracer(), client=client)
+        agent.soft_budget_seconds = 210
+
+        result = await agent.run("Research TestCo")
+
+        assert result["status"] == "failed"          # LOUD, not None/complete
+        assert result["data"] is None
+        assert result["error_summary"]               # error recorded
+        assert any("research" in g.lower() for g in result["gaps"])
+        # Exactly one attempt — the timeout was not retried into a second window.
+        assert client.messages.create.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_fast_transient_error_is_retried_within_budget(self):
+        """A fast transient error (connection blip / 429) gets a bounded retry, so
+        a single blip does not kill the agent. Fails before the fix (no retry)."""
+        client = make_mock_client()
+        client.messages.create.side_effect = [
+            anthropic.APIConnectionError(message="blip", request=_req()),
+            _make_text_response(json.dumps(VALID_RESEARCH_JSON)),
+        ]
+        agent = ResearchAgent(tracer=make_tracer(), client=client)
+        agent.soft_budget_seconds = 210  # plenty of working time remains
+
+        with patch("src.agents.base.asyncio.sleep", new=AsyncMock()):
+            result = await agent.run("Research TestCo")
+
+        assert result["status"] == "complete"
+        assert result["data"]["company_name"] == "TestCo"
+        assert client.messages.create.call_count == 2  # retried once, then succeeded
+
+    @pytest.mark.asyncio
+    async def test_transient_retry_is_bounded(self):
+        """Transient retries are capped (MAX_TRANSIENT_RETRIES), then fail loud —
+        no unbounded retry loop."""
+        client = make_mock_client()
+        client.messages.create.side_effect = anthropic.APIConnectionError(
+            message="persistent blip", request=_req())
+        agent = ResearchAgent(tracer=make_tracer(), client=client)
+        agent.soft_budget_seconds = 210
+
+        with patch("src.agents.base.asyncio.sleep", new=AsyncMock()):
+            result = await agent.run("Research TestCo")
+
+        assert result["status"] == "failed"
+        # 1 initial attempt + MAX_TRANSIENT_RETRIES retries, then give up.
+        assert client.messages.create.call_count == agent.MAX_TRANSIENT_RETRIES + 1
+
+    @pytest.mark.asyncio
+    async def test_transient_not_retried_when_budget_exhausted(self):
+        """When working time is gone, even a transient error is not retried — a
+        retry could not fit in the remaining budget, so fail loud at once."""
+        client = make_mock_client()
+        client.messages.create.side_effect = anthropic.APIConnectionError(
+            message="blip", request=_req())
+        agent = ResearchAgent(tracer=make_tracer(), client=client)
+        agent.soft_budget_seconds = 0  # no working time left
+
+        result = await agent.run("Research TestCo")
+
+        assert result["status"] == "failed"
+        assert client.messages.create.call_count == 1  # no retry attempted
+
+
+def test_phase1_client_disables_sdk_retries():
+    """The Phase-1/classifier client must disable the SDK's budget-blind retry
+    (so a timed-out request cannot stack a second full-timeout attempt) while
+    keeping a timeout above the worst single-emit latency."""
+    from src.main import _make_phase1_client
+    c = _make_phase1_client()
+    assert c.max_retries == 0
+    assert c.timeout == 240.0
+
+
 # ── Web Search Volume Cap Tests ────────────────────────────────────
 
 class TestWebSearchVolumeCaps:

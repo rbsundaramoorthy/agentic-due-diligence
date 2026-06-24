@@ -33,6 +33,7 @@ from src.observability.tracer import AgentTracer
 from src.observability.agent_db import AgentDB
 from src.sources.cache import SourceCache
 from src.synthesis.assembler import assemble_report, annotate_claim_ids
+from src.schemas.models import GapRecord
 from src.synthesis.report_generator import render_report_from_doc
 from src.synthesis.pdf_report import render_pdf_report_from_doc
 from evals.eval_runner import GroundTruthEvaluator, persist_eval_results, print_scorecard
@@ -41,6 +42,21 @@ console = Console()
 
 _AGENT_TIMEOUT = 300  # seconds — p99 observed max is ~174s; 300s catches genuine hangs
 _SOFT_BUDGET = int(_AGENT_TIMEOUT * 0.70)  # 210s — soft budget; agent forced to reflect early
+
+
+def _make_phase1_client() -> "anthropic.AsyncAnthropic":
+    """Shared client for the classifier + Phase-1 agents.
+
+    240s per-request timeout: a content-rich agent's single final-JSON emit can run
+    ~150s, so the timeout must exceed it. But 240s is most of the 300s agent budget,
+    so the SDK's budget-blind retry (default max_retries=2) would stack a second
+    full-timeout attempt that the hard budget cuts mid-flight — recording a SILENT
+    null section (the failure seen earlier on risk/synthesis). We therefore set
+    max_retries=0 here and move transient-error resilience into the agent's own
+    budget-aware retry (BaseAgent.MAX_TRANSIENT_RETRIES), which retries fast errors
+    only while working time remains and never retries a timeout.
+    """
+    return anthropic.AsyncAnthropic(timeout=240.0, max_retries=0)
 
 
 async def _run_with_timeout(agent, task: str) -> dict:
@@ -70,15 +86,10 @@ async def run_due_diligence(company_name: str, json_only: bool = False) -> Agent
     )
     console.print()
 
-    # Initialize shared components.
-    # 240s per-request HTTP timeout (classifier + Phase-1 agents): a content-rich
-    # agent's single final-JSON emit (up to 8192 tokens) can run ~150s. At the old
-    # 120s timeout those emits were cut mid-stream and the SDK's retries then
-    # stacked past the 300s hard agent budget (observed: a GOOGLE risk run timed
-    # out). 240s sits above the worst single-call latency yet under the 300s hard
-    # timeout, so a large emit completes in one attempt while genuine hangs still
-    # surface via the agent's wait_for. (Synthesis keeps its own dedicated client.)
-    client = anthropic.AsyncAnthropic(timeout=240.0)
+    # Initialize shared components. See _make_phase1_client for the timeout /
+    # retry rationale (240s timeout, max_retries=0 + agent-level budget-aware
+    # retry). Synthesis keeps its own dedicated client.
+    client = _make_phase1_client()
     tracer = AgentTracer(company_name)
     os.makedirs("outputs", exist_ok=True)
     agent_db = AgentDB(db_path="outputs/agent_log.db")
@@ -193,6 +204,24 @@ async def run_due_diligence(company_name: str, json_only: bool = False) -> Agent
     trace_summary = tracer.summary()
     company_slug = company_name.lower().replace(" ", "_").replace(".", "")
 
+    # Surface any Phase-1 agent that did not produce data (timed out / failed /
+    # exhausted turns) as an EXPLICIT, loud gap. Without this the section would be
+    # a silent null in the report — no gap, no error — because _collect_gaps only
+    # inspects fields of a present dict. The orchestration result carries the
+    # status/reason that the data dict alone cannot.
+    incomplete_gaps = []
+    for agent_name, res in (
+        ("research", research_result), ("financial", financial_result),
+        ("risk", risk_result), ("social_media", social_media_result),
+        ("edgar", edgar_result),
+    ):
+        if res.get("data") is None:
+            reason = res.get("error_summary") or "Agent did not complete; section unavailable"
+            incomplete_gaps.append(GapRecord(
+                field=f"{agent_name}_section", agent=agent_name,
+                reason=f"{res.get('status', 'incomplete')}: {reason}",
+            ))
+
     # Assemble canonical ReportDocument — single source of truth
     doc = assemble_report(
         research_data=research_data,
@@ -202,6 +231,7 @@ async def run_due_diligence(company_name: str, json_only: bool = False) -> Agent
         synthesis_data=synthesis_data,
         trace_summary=trace_summary,
         edgar_data=edgar_data,
+        extra_gaps=incomplete_gaps,
     )
 
     # Write canonical JSON

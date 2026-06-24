@@ -13,6 +13,7 @@ from urllib.parse import urlparse
 from src.schemas.models import ReportDocument
 from src.synthesis.assembler import assemble_report, build_render_dicts
 from src.synthesis.render_common import (
+    OVERALL_NOT_COMPUTABLE,
     disclaimer_sentences,
     edgar_line,
     format_generated_et,
@@ -362,8 +363,10 @@ def _cover(company, now, cost, duration, report_score, financial_data, risk_data
         for lbl, key in [("Research", "research"), ("Financial", "financial"),
                          ("Risk", "risk"), ("Social Media", "social_media"),
                          ("Synthesis", "synthesis")]:
-            if sec_confs and key in sec_confs:
-                sec_parts.append(f"{lbl} {sec_confs[key]*100:.0f}%")
+            if sec_confs is not None:
+                # Missing section shown honestly as n/a (never a fabricated value);
+                # a missing weighted section already lowered Overall.
+                sec_parts.append(f"{lbl} {sec_confs[key]*100:.0f}%" if key in sec_confs else f"{lbl} n/a")
             elif _fallback.get(key):
                 sec_parts.append(f"{lbl} {_section_confidence(_fallback[key])*100:.0f}%")
         if sec_parts:
@@ -386,6 +389,21 @@ def _cover(company, now, cost, duration, report_score, financial_data, risk_data
         elems.append(_p("Overall is a weighted blend of Financial and Risk (40% each) and "
                         "Social Media (20%); Research and Synthesis are reported but not weighted.",
                         S_BODY_SM))
+        elems.append(Spacer(1, 4*mm))
+    else:
+        # Overall is UNDEFINED (no weighted section scorable). Show it honestly in
+        # a neutral bar — never 0%, never omitted.
+        nc_tbl = Table([[_p(f"Overall Confidence: {OVERALL_NOT_COMPUTABLE}",
+                            ParagraphStyle("ncsc", fontSize=9, fontName="Helvetica-Bold",
+                                           textColor=C_GRAY_FG))]], colWidths=[usable])
+        nc_tbl.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), C_GRAY_BG),
+            ("LEFTPADDING",  (0,0), (-1,-1), 8),
+            ("RIGHTPADDING", (0,0), (-1,-1), 8),
+            ("TOPPADDING",   (0,0), (-1,-1), 6),
+            ("BOTTOMPADDING",(0,0), (-1,-1), 6),
+        ]))
+        elems.append(nc_tbl)
         elems.append(Spacer(1, 4*mm))
 
     return elems
@@ -821,8 +839,9 @@ def _render_html(company, now, cost, duration, report_score,
         for lbl, key in [("Research", "research"), ("Financial", "financial"),
                          ("Risk", "risk"), ("Social Media", "social_media"),
                          ("Synthesis", "synthesis")]:
-            if sec_confs and key in sec_confs:
-                sec_parts.append(f"{lbl} {sec_confs[key]*100:.0f}%")
+            if sec_confs is not None:
+                # Missing section shown honestly as n/a, never a fabricated value.
+                sec_parts.append(f"{lbl} {sec_confs[key]*100:.0f}%" if key in sec_confs else f"{lbl} n/a")
         sections_html = ""
         note_html = ""
         if sec_parts:
@@ -833,6 +852,11 @@ def _render_html(company, now, cost, duration, report_score,
         html += (f'<div class="confbar" style="background:{bar_bg};color:{bar_fg}">'
                  f'<span class="overall">Overall Confidence: {pct:.0f}%</span>'
                  f'{sections_html}</div>{note_html}')
+    else:
+        # Overall is UNDEFINED (no weighted section scorable). Show it honestly in a
+        # neutral bar — never 0%, never a blank/omitted line.
+        html += (f'<div class="confbar" style="background:#f1f5f9;color:#475569">'
+                 f'<span class="overall">Overall Confidence: {_esc(OVERALL_NOT_COMPUTABLE)}</span></div>')
 
     # ── Prominent disclaimer (static render text) ────────────────────────────
     disc_html = "".join(f"<p>{_esc(s)}</p>" for s in disclaimer_sentences(company))

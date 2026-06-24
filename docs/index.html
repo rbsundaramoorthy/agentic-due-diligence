@@ -1,0 +1,410 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Multi-Agent Due Diligence — Engineering Portfolio</title>
+<meta name="description" content="A multi-agent due-diligence pipeline built for reliability, auditability, and honest failure handling. Engineering portfolio and case study.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#F6F7F5; --surface:#FFFFFF; --ink:#16242B; --mute:#5E6E75;
+    --line:#DCE3E0; --line-strong:#C3CECA;
+    --teal:#1F7A6B; --teal-deep:#14554A; --teal-wash:#E4F0ED;
+    --amber:#A8721F; --amber-wash:#F4EAD6;
+    --slate:#4A6068; --slate-wash:#E7EDEF;
+    --red:#A3352B;
+    --display:"Space Grotesk",sans-serif; --body:"Inter",sans-serif; --mono:"IBM Plex Mono",monospace;
+    --maxw:960px;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth; scroll-padding-top:76px}
+  body{margin:0; background:var(--paper); color:var(--ink); font-family:var(--body); font-size:16px; line-height:1.65; -webkit-font-smoothing:antialiased}
+  a{color:var(--teal-deep); text-decoration:none; border-bottom:1px solid var(--line-strong)}
+  a:hover{border-color:var(--teal)}
+  code,pre,.mono{font-family:var(--mono)}
+  .wrap{max-width:var(--maxw); margin:0 auto; padding:0 24px}
+
+  /* nav */
+  nav.top{position:sticky; top:0; z-index:20; background:rgba(246,247,245,.92); backdrop-filter:saturate(140%) blur(6px); border-bottom:1px solid var(--line)}
+  nav.top .wrap{display:flex; align-items:center; gap:16px; height:60px}
+  nav .brand{font-family:var(--mono); font-weight:500; font-size:13px; letter-spacing:.02em; color:var(--ink); border:0; white-space:nowrap}
+  nav .links{display:flex; gap:2px; overflow-x:auto; flex:1; scrollbar-width:none}
+  nav .links::-webkit-scrollbar{display:none}
+  nav .links a{font-family:var(--mono); font-size:12px; color:var(--mute); padding:6px 9px; border:0; border-radius:6px; white-space:nowrap}
+  nav .links a:hover{color:var(--ink); background:var(--teal-wash)}
+  nav .links a.active{color:var(--teal-deep); background:var(--teal-wash)}
+  nav .gh{font-family:var(--mono); font-size:12px; border:1px solid var(--line-strong); padding:6px 10px; border-radius:6px; color:var(--ink); white-space:nowrap}
+  nav .gh:hover{border-color:var(--teal); background:var(--surface)}
+
+  /* hero */
+  header.hero{padding:72px 0 40px; border-bottom:1px solid var(--line)}
+  .eyebrow{font-family:var(--mono); font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:var(--teal); margin:0 0 20px}
+  h1{font-family:var(--display); font-weight:700; font-size:clamp(34px,6vw,60px); line-height:1.02; letter-spacing:-.02em; margin:0}
+  h1 .sub{display:block; font-weight:500; font-size:clamp(17px,2.6vw,24px); line-height:1.3; color:var(--mute); letter-spacing:-.01em; margin-top:18px; max-width:30ch}
+  .lede{font-size:18px; color:#2C3A40; max-width:62ch; margin:26px 0 0}
+  .meta{display:flex; flex-wrap:wrap; gap:10px 12px; margin:28px 0 0}
+  .meta a, .meta .pin{font-family:var(--mono); font-size:12.5px; padding:8px 12px; border:1px solid var(--line-strong); border-radius:8px; background:var(--surface); color:var(--ink); display:inline-flex; align-items:center; gap:7px}
+  .meta a:hover{border-color:var(--teal)}
+  .meta .pin{color:var(--mute); cursor:default}
+  .dot{width:7px; height:7px; border-radius:50%; background:var(--teal); display:inline-block}
+  .disclaimer{font-size:13px; color:var(--mute); margin:22px 0 0; max-width:70ch; line-height:1.5}
+
+  /* status legend */
+  .legend{display:flex; flex-wrap:wrap; gap:14px; padding:16px 0 0; margin-top:22px; border-top:1px dashed var(--line-strong)}
+  .legend .item{font-family:var(--mono); font-size:11.5px; color:var(--mute); display:flex; align-items:center; gap:7px}
+
+  /* chips */
+  .chip{font-family:var(--mono); font-size:11px; font-weight:500; letter-spacing:.03em; text-transform:uppercase; padding:3px 8px; border-radius:5px; white-space:nowrap; border:1px solid transparent}
+  .chip.shipped{color:var(--teal-deep); background:var(--teal-wash); border-color:#BfDdD4}
+  .chip.companion{color:#33474E; background:var(--slate-wash); border-color:#CFDADD}
+  .chip.designed{color:#7A521A; background:var(--amber-wash); border-color:#E4D2AE}
+  .chip.high{color:var(--teal-deep); background:var(--teal-wash)}
+  .chip.med{color:#7A521A; background:var(--amber-wash)}
+  .chip.tier{color:#33474E; background:var(--slate-wash)}
+
+  /* sections */
+  section{padding:56px 0; border-bottom:1px solid var(--line)}
+  .sec-head{display:flex; align-items:baseline; gap:14px; flex-wrap:wrap; margin:0 0 8px}
+  .sec-num{font-family:var(--mono); font-size:13px; color:var(--teal)}
+  h2{font-family:var(--display); font-weight:500; font-size:clamp(24px,3.5vw,32px); letter-spacing:-.015em; margin:0}
+  .sec-lede{font-size:17px; color:#2C3A40; max-width:64ch; margin:14px 0 24px}
+  p{max-width:66ch}
+  ul.clean{list-style:none; padding:0; margin:18px 0; max-width:70ch}
+  ul.clean li{padding:10px 0 10px 22px; border-top:1px solid var(--line); position:relative}
+  ul.clean li:before{content:"\2192"; position:absolute; left:0; color:var(--teal); font-family:var(--mono)}
+  ul.clean li b{font-weight:500}
+
+  /* code + tables */
+  pre{background:#10201D; color:#D9E6E1; border-radius:10px; padding:18px 20px; overflow-x:auto; font-size:13px; line-height:1.6; margin:18px 0; border:1px solid #0c1815}
+  pre .c{color:#7FA99B} pre .k{color:#7FD1B8} pre .v{color:#E7D9A8} pre .m{color:#9FB4BB}
+  :not(pre)>code{background:var(--teal-wash); color:var(--teal-deep); padding:1px 6px; border-radius:5px; font-size:13.5px}
+  table{width:100%; border-collapse:collapse; font-size:13.5px; margin:18px 0; font-family:var(--mono)}
+  table th{text-align:left; font-weight:500; color:var(--mute); border-bottom:1px solid var(--line-strong); padding:8px 10px; font-size:11.5px; letter-spacing:.03em; text-transform:uppercase}
+  table td{padding:8px 10px; border-bottom:1px solid var(--line)}
+  table td.num{text-align:right}
+  table tr.total td{border-top:1px solid var(--line-strong); border-bottom:0; color:var(--ink); font-weight:500}
+  .note{font-size:13px; color:var(--mute); margin-top:10px}
+
+  /* diagram */
+  .diagram{background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:8px; margin:8px 0 0; overflow-x:auto}
+  .diagram svg{display:block; min-width:560px; width:100%; height:auto}
+
+  /* two-col cards */
+  .cards{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:20px 0 0}
+  .card{background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:18px 20px}
+  .card h3{font-family:var(--display); font-weight:500; font-size:16px; margin:0 0 6px}
+  .card p{font-size:14.5px; color:#2C3A40; margin:0}
+
+  footer{padding:48px 0 64px}
+  footer .wrap{color:var(--mute); font-size:13.5px}
+  footer .flinks{display:flex; flex-wrap:wrap; gap:16px; margin:0 0 16px}
+  footer a{font-family:var(--mono); font-size:13px}
+
+  @media (max-width:680px){
+    header.hero{padding:48px 0 32px}
+    .cards{grid-template-columns:1fr}
+    section{padding:44px 0}
+  }
+  :focus-visible{outline:2px solid var(--teal); outline-offset:2px; border-radius:3px}
+  @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+</style>
+</head>
+<body>
+
+<nav class="top">
+  <div class="wrap">
+    <span class="brand">due-diligence&nbsp;/&nbsp;pipeline</span>
+    <div class="links" id="navlinks">
+      <a href="#architecture">architecture</a>
+      <a href="#demo">demo</a>
+      <a href="#evals">evals</a>
+      <a href="#trace">trace</a>
+      <a href="#tools">tools</a>
+      <a href="#failure">failure</a>
+      <a href="#attribution">attribution</a>
+      <a href="#cost">cost</a>
+      <a href="#auth">auth/acl</a>
+      <a href="#hitl">human-in-loop</a>
+      <a href="#security">security</a>
+      <a href="#production">production</a>
+    </div>
+    <a class="gh" href="https://github.com/rbsundaramoorthy/agentic-due-diligence">GitHub &#8599;</a>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <p class="eyebrow">Multi-agent due diligence &middot; build-in-public</p>
+    <h1>Agents you can audit.<span class="sub">Every claim sourced. Every confidence bounded. Every failure loud.</span></h1>
+    <p class="lede">A multi-agent pipeline that researches a company from public sources and produces a provenance-tracked due-diligence report. Built solo as a demonstration of the reliability and governance controls that regulated and high-trust workflows need before they will let an agent near a real decision.</p>
+    <div class="meta">
+      <span class="pin"><span class="dot"></span>Pinned run &middot; 2026-06-21 &middot; commit <code style="background:none;color:inherit;padding:0">&lt;04e46d6fb16d288ebc2fcd12de24216d90175e08&gt;</code></span>
+      <a href="https://github.com/rbsundaramoorthy/agentic-due-diligence">Repository &#8599;</a>
+      <a href="sample-report-apple.md">Sample report (MD) &#8599;</a>
+      <a href="sample-report-apple.pdf">Sample report (PDF) &#8599;</a>
+      <a href="https://www.linkedin.com/in/rbsundaramoorthy">LinkedIn &#8599;</a>
+    </div>
+    <p class="disclaimer">Demonstration system. Reports are generated by an automated AI pipeline from public sources, are not professional due diligence, are not investment advice, and are not affiliated with or endorsed by any company named in a report.</p>
+    <div class="legend">
+      <span class="item"><span class="chip shipped">Shipped</span> built and running in this pipeline</span>
+      <span class="item"><span class="chip companion">Companion repo</span> proven in a sibling project</span>
+      <span class="item"><span class="chip designed">Designed</span> the production design, not yet built</span>
+    </div>
+  </div>
+</header>
+
+<main>
+
+<section id="architecture">
+  <div class="wrap">
+    <div class="sec-head"><span class="sec-num">01</span><h2>Architecture</h2><span class="chip shipped">Shipped</span></div>
+    <p class="sec-lede">A classifier routes the query, five specialist agents research in parallel with tool access, a synthesis step reconciles them, and an assembler validates provenance and emits one canonical JSON document that every render is derived from.</p>
+    <div class="diagram">
+      <svg viewBox="0 0 720 742" role="img" aria-label="Pipeline architecture: query to classifier to five parallel agents to synthesis to assembler to canonical report document to renders, with observability across the whole run.">
+        <defs>
+          <marker id="ar" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="#5E6E75" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></marker>
+        </defs>
+        <g font-family="Inter, sans-serif">
+        <!-- query -->
+        <rect x="290" y="20" width="140" height="44" rx="9" fill="#EEF1F0" stroke="#C3CECA" stroke-width="1"/>
+        <text x="360" y="47" text-anchor="middle" font-size="14" fill="#16242B">Company query</text>
+        <line x1="360" y1="64" x2="360" y2="100" stroke="#5E6E75" stroke-width="1.4" marker-end="url(#ar)"/>
+        <!-- classifier -->
+        <rect x="266" y="102" width="188" height="46" rx="9" fill="#E4F0ED" stroke="#1F7A6B" stroke-width="1"/>
+        <text x="360" y="124" text-anchor="middle" font-size="14" font-weight="500" fill="#14554A">Classifier</text>
+        <text x="360" y="139" text-anchor="middle" font-size="11.5" fill="#3C6B61" font-family="IBM Plex Mono, monospace">Haiku &middot; routes &amp; scopes</text>
+        <line x1="360" y1="148" x2="360" y2="184" stroke="#5E6E75" stroke-width="1.4" marker-end="url(#ar)"/>
+        <!-- phase 1 group -->
+        <rect x="40" y="186" width="640" height="146" rx="12" fill="none" stroke="#C3CECA" stroke-width="1" stroke-dasharray="5 4"/>
+        <text x="56" y="208" font-size="11.5" fill="#5E6E75" font-family="IBM Plex Mono, monospace">PHASE 1 &middot; 5 agents in parallel (Sonnet)</text>
+        <g font-size="13" font-weight="500" fill="#14554A">
+          <rect x="52"  y="222" width="116" height="44" rx="8" fill="#E4F0ED" stroke="#1F7A6B" stroke-width="1"/><text x="110" y="248" text-anchor="middle">Research</text>
+          <rect x="176" y="222" width="116" height="44" rx="8" fill="#E4F0ED" stroke="#1F7A6B" stroke-width="1"/><text x="234" y="248" text-anchor="middle">Financial</text>
+          <rect x="300" y="222" width="116" height="44" rx="8" fill="#E4F0ED" stroke="#1F7A6B" stroke-width="1"/><text x="358" y="248" text-anchor="middle">Risk</text>
+          <rect x="424" y="222" width="116" height="44" rx="8" fill="#E4F0ED" stroke="#1F7A6B" stroke-width="1"/><text x="482" y="248" text-anchor="middle">Social</text>
+          <rect x="548" y="222" width="116" height="44" rx="8" fill="#E4F0ED" stroke="#1F7A6B" stroke-width="1"/><text x="606" y="248" text-anchor="middle">EDGAR</text>
+        </g>
+        <text x="360" y="296" text-anchor="middle" font-size="11.5" fill="#5E6E75" font-family="IBM Plex Mono, monospace">tools: web search (tiered) &middot; SEC EDGAR &middot; court dockets &middot; federal contracts</text>
+        <text x="360" y="315" text-anchor="middle" font-size="11.5" fill="#5E6E75" font-family="IBM Plex Mono, monospace">EDGAR audited figures merge into Financial at primary tier</text>
+        <line x1="360" y1="332" x2="360" y2="368" stroke="#5E6E75" stroke-width="1.4" marker-end="url(#ar)"/>
+        <!-- synthesis -->
+        <rect x="266" y="370" width="188" height="46" rx="9" fill="#E4F0ED" stroke="#1F7A6B" stroke-width="1"/>
+        <text x="360" y="392" text-anchor="middle" font-size="14" font-weight="500" fill="#14554A">Synthesis</text>
+        <text x="360" y="407" text-anchor="middle" font-size="11.5" fill="#3C6B61" font-family="IBM Plex Mono, monospace">Sonnet &middot; reconciles, cites claim ids</text>
+        <line x1="360" y1="416" x2="360" y2="452" stroke="#5E6E75" stroke-width="1.4" marker-end="url(#ar)"/>
+        <!-- assembler (the gate, amber) -->
+        <rect x="240" y="454" width="240" height="58" rx="10" fill="#F4EAD6" stroke="#A8721F" stroke-width="1.2"/>
+        <text x="360" y="478" text-anchor="middle" font-size="14" font-weight="500" fill="#7A521A">Assembler</text>
+        <text x="360" y="495" text-anchor="middle" font-size="11.5" fill="#8A6526" font-family="IBM Plex Mono, monospace">provenance validation &middot; single source of truth</text>
+        <line x1="360" y1="512" x2="360" y2="548" stroke="#5E6E75" stroke-width="1.4" marker-end="url(#ar)"/>
+        <!-- report document -->
+        <rect x="250" y="550" width="220" height="46" rx="9" fill="#EEF1F0" stroke="#C3CECA" stroke-width="1"/>
+        <text x="360" y="572" text-anchor="middle" font-size="14" font-weight="500" fill="#16242B">ReportDocument</text>
+        <text x="360" y="587" text-anchor="middle" font-size="11.5" fill="#5E6E75" font-family="IBM Plex Mono, monospace">canonical JSON</text>
+        <line x1="360" y1="596" x2="360" y2="632" stroke="#5E6E75" stroke-width="1.4" marker-end="url(#ar)"/>
+        <!-- renders -->
+        <g font-size="13" fill="#16242B">
+          <rect x="222" y="634" width="86" height="40" rx="8" fill="#EEF1F0" stroke="#C3CECA" stroke-width="1"/><text x="265" y="659" text-anchor="middle">Markdown</text>
+          <rect x="317" y="634" width="86" height="40" rx="8" fill="#EEF1F0" stroke="#C3CECA" stroke-width="1"/><text x="360" y="659" text-anchor="middle">PDF</text>
+          <rect x="412" y="634" width="86" height="40" rx="8" fill="#EEF1F0" stroke="#C3CECA" stroke-width="1"/><text x="455" y="659" text-anchor="middle">HTML</text>
+        </g>
+        <!-- observability band -->
+        <rect x="40" y="694" width="640" height="40" rx="9" fill="none" stroke="#C3CECA" stroke-width="1" stroke-dasharray="5 4"/>
+        <text x="360" y="719" text-anchor="middle" font-size="11.5" fill="#5E6E75" font-family="IBM Plex Mono, monospace">Observability &middot; every LLM and tool call traced (SQLite) &middot; per-agent cost &amp; tokens</text>
+        </g>
+      </svg>
+    </div>
+    <p class="note">The assembler (amber) is the integrity gate: it is the only place a field is derived or overlaid, so the value synthesis reasons over and the value the report prints come from one source and cannot drift.</p>
+  </div>
+</section>
+
+<section id="demo">
+  <div class="wrap">
+    <div class="sec-head"><span class="sec-num">02</span><h2>Runnable demo</h2><span class="chip shipped">Shipped</span></div>
+    <p class="sec-lede">One command runs the full pipeline against any company and writes the canonical JSON plus all three renders. The committed sample is frozen to one run so it matches what is described here.</p>
+<pre><span class="c"># set your key, then run against any company</span>
+export ANTHROPIC_API_KEY=sk-...
+python -m src.main <span class="v">"Apple Inc."</span>
+
+<span class="c"># writes: report.json (canonical) + .md / .pdf / .html renders</span></pre>
+    <p>Outputs drift run to run because the pipeline pulls live public data, so the published sample is pinned to a specific run and commit. Read the frozen sample in <a href="sample-report-apple.md">Markdown</a> or <a href="sample-report-apple.pdf">PDF</a>.</p>
+    <p class="note">Confirm the entrypoint against your repo before publishing this command.</p>
+  </div>
+</section>
+
+<section id="evals">
+  <div class="wrap">
+    <div class="sec-head"><span class="sec-num">03</span><h2>Eval harness</h2><span class="chip shipped">Shipped</span></div>
+    <p class="sec-lede">Ground-truth checks anchor the financial claims to audited filings, and the test suite is written so a test can only pass by encoding the property it checks.</p>
+    <ul class="clean">
+      <li><b>SEC EDGAR ground truth.</b> Revenue and net income are checked against the audited 10-K figures pulled from EDGAR, with exact and fuzzy matching to tolerate formatting differences.</li>
+      <li><b>Regression discipline.</b> Fixes ship with fail-before / pass-after tests that encode the property, not the new output, and use arbitrary fixtures (never the real company's numbers) so a test cannot pass by memorizing an answer.</li>
+      <li><b>Honest about what it measures.</b> Per-claim confidence is <em>bounded by source tier</em>, not statistically calibrated. The harness gives reliable signal on output quality; it does not claim a calibration it has not measured.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="trace">
+  <div class="wrap">
+    <div class="sec-head"><span class="sec-num">04</span><h2>Trace viewer</h2><span class="chip shipped">Shipped</span></div>
+    <p class="sec-lede">Every LLM call and tool invocation is written to SQLite with its turn, stop reason, tokens, and duration, so any run can be replayed and any failure reconstructed.</p>
+    <table>
+      <thead><tr><th>turn</th><th>stop_reason</th><th class="num">out tok</th><th class="num">duration</th></tr></thead>
+      <tbody>
+        <tr><td>0&ndash;3</td><td>tool_use</td><td class="num">132&ndash;252</td><td class="num">2.8&ndash;4.4s</td></tr>
+        <tr><td>4</td><td>end_turn</td><td class="num">7,878</td><td class="num">152.6s</td></tr>
+      </tbody>
+    </table>
+    <p>The trace is what turned a silent hang into a precise diagnosis: it showed a risk emit being cut at the 4096-token cap, forced into a retry, and then killed by the agent budget, which is exactly the failure the next section is about. A Streamlit replay steps through a run turn by turn.</p>
+  </div>
+</section>
+
+<section id="tools">
+  <div class="wrap">
+    <div class="sec-head"><span class="sec-num">05</span><h2>Tool-calling</h2><span class="chip shipped">Shipped</span></div>
+    <p class="sec-lede">Agents call structured tools in parallel and the results are folded back as evidence, with each source assigned a reliability tier before it ever reaches a claim.</p>
+<pre><span class="c"># Risk agent, turn 1 — tool calls issued in parallel</span>
+courtlistener_case_search(<span class="m">query=</span><span class="v">"Apple Inc."</span>)      <span class="c">&#8594; 13,833 dockets</span>
+sec_edgar_companyfacts(<span class="m">cik=</span><span class="v">"0000320193"</span>)        <span class="c">&#8594; FY2025 10-K (audited, primary)</span>
+web_search(<span class="m">query=</span><span class="v">"Apple DOJ antitrust 2025"</span>)       <span class="c">&#8594; 6 results, each tiered</span>
+samgov_contract_search(<span class="m">name=</span><span class="v">"Apple Inc."</span>)        <span class="c">&#8594; active federal contractor</span></pre>
+    <p class="note">Tools currently in use: SEC EDGAR (company facts and filings), CourtListener (federal dockets), SAM.gov (federal contracts), and tiered web search and fetch.</p>
+  </div>
+</section>
+
+<section id="failure">
+  <div class="wrap">
+    <div class="sec-head"><span class="sec-num">06</span><h2>Failure-mode handling</h2><span class="chip shipped">Shipped</span></div>
+    <p class="sec-lede">The hardest engineering here was not producing a report; it was making the pipeline fail loudly. Early versions failed silently, a section would simply be missing while the report still looked complete, so the work went into the opposite of features.</p>
+    <ul class="clean">
+      <li><b>No silent nulls.</b> A section whose agent ran but produced nothing is recorded as <code>status=failed</code>, never <code>None</code>, and the missing section is surfaced in the report's gaps.</li>
+      <li><b>Bounded retries inside the budget.</b> A timed-out emit cannot stack a second attempt that the agent budget would cut mid-flight; transient errors get a small bounded retry only while time remains.</li>
+      <li><b>Missing sections move the number.</b> A missing weighted section contributes zero at its full weight, so a report that lost its risk section can no longer show a confident overall score.</li>
+    </ul>
+<pre><span class="c"># a Phase-1 emit that exceeds the client timeout no longer vanishes</span>
+status = <span class="v">"failed"</span>                 <span class="c"># never None</span>
+gaps  += [<span class="v">"risk: section timed out"</span>]  <span class="c"># surfaced in the report</span>
+overall = 0.40&middot;financial + 0.40&middot;<span class="k">0</span> + 0.20&middot;social   <span class="c"># missing section drags it down</span></pre>
+  </div>
+</section>
+
+<section id="attribution">
+  <div class="wrap">
+    <div class="sec-head"><span class="sec-num">07</span><h2>Source attribution</h2><span class="chip shipped">Shipped</span></div>
+    <p class="sec-lede">Every claim carries its source, a reliability tier, and a confidence bounded by that tier, plus the upstream claims it was synthesized from, so any line in the report can be traced back to evidence.</p>
+<pre>{
+  <span class="k">"claim_id"</span>: <span class="v">"c312809e1f5d"</span>,
+  <span class="k">"value"</span>: <span class="v">"DOJ Sherman Act sec.2 case survived motion to dismiss (Jun 30, 2025)"</span>,
+  <span class="k">"confidence"</span>: <span class="v">"HIGH"</span>,
+  <span class="k">"source_tier"</span>: <span class="v">"primary"</span>,
+  <span class="k">"sources"</span>: [<span class="v">"justice.gov"</span>, <span class="v">"natlawreview.com"</span>],
+  <span class="k">"synthesized_from"</span>: [<span class="v">"risk:reg_07"</span>, <span class="v">"research:legal_03"</span>]
+}</pre>
+    <p>Source tiers, lightest to strongest: <span class="chip tier">community</span> <span class="chip tier">aggregator</span> <span class="chip tier">reputable</span> <span class="chip tier">primary</span>. A claim's confidence can be no higher than its tier allows, so a <span class="chip high">HIGH &middot; primary</span> claim is grounded in a filing or court record, while an <span class="chip med">MED &middot; community</span> claim is flagged as needing verification.</p>
+  </div>
+</section>
+
+<section id="cost">
+  <div class="wrap">
+    <div class="sec-head"><span class="sec-num">08</span><h2>Cost &amp; token monitoring</h2><span class="chip shipped">Shipped</span></div>
+    <p class="sec-lede">Every report ends with a full accounting: per-agent LLM calls, tool calls, tokens, and cost, plus the source-tier mix and whether the EDGAR ground-truth lookup succeeded.</p>
+    <table>
+      <thead><tr><th>agent</th><th class="num">llm</th><th class="num">tools</th><th class="num">tokens</th><th class="num">cost</th></tr></thead>
+      <tbody>
+        <tr><td>classifier</td><td class="num">1</td><td class="num">0</td><td class="num">577</td><td class="num">$0.0009</td></tr>
+        <tr><td>research</td><td class="num">6</td><td class="num">8</td><td class="num">49,576</td><td class="num">$0.2537</td></tr>
+        <tr><td>financial</td><td class="num">5</td><td class="num">6</td><td class="num">43,662</td><td class="num">$0.2363</td></tr>
+        <tr><td>risk</td><td class="num">5</td><td class="num">7</td><td class="num">53,909</td><td class="num">$0.3010</td></tr>
+        <tr><td>social</td><td class="num">5</td><td class="num">8</td><td class="num">48,344</td><td class="num">$0.2502</td></tr>
+        <tr><td>edgar</td><td class="num">3</td><td class="num">3</td><td class="num">17,559</td><td class="num">$0.0811</td></tr>
+        <tr><td>synthesis</td><td class="num">1</td><td class="num">0</td><td class="num">22,127</td><td class="num">$0.1367</td></tr>
+        <tr class="total"><td>total</td><td class="num">26</td><td class="num">32</td><td class="num">235,754</td><td class="num">$1.2599</td></tr>
+      </tbody>
+    </table>
+    <p class="note">From a representative run (307s). Source tier coverage: primary 33% &middot; reputable 15% &middot; aggregator 3% &middot; community 14% &middot; unknown 36%. EDGAR: succeeded (CIK 0000320193).</p>
+  </div>
+</section>
+
+<section id="auth">
+  <div class="wrap">
+    <div class="sec-head"><span class="sec-num">09</span><h2>Auth &amp; ACL pattern</h2><span class="chip companion">Companion repo</span></div>
+    <p class="sec-lede">This pipeline reads only public data, so it has no access-control surface of its own. The pattern for governed data lives in the companion RAG platform, where retrieval is access-control aware.</p>
+    <div class="cards">
+      <div class="card"><h3>Tenant isolation</h3><p>Each tenant's documents are partitioned so one tenant's data never reaches another's retrieval results.</p></div>
+      <div class="card"><h3>ACL-safe retrieval</h3><p>A query only retrieves chunks the requesting user is authorized to see; permissions are enforced at retrieval, not after generation.</p></div>
+    </div>
+    <p class="note">Companion project: a multi-tenant RAG platform with event-driven ingestion, ACL-safe retrieval, and an integrated eval layer. Integrating that retrieval layer into this pipeline is listed under what production would add.</p>
+  </div>
+</section>
+
+<section id="hitl">
+  <div class="wrap">
+    <div class="sec-head"><span class="sec-num">10</span><h2>Human-in-the-loop approval</h2><span class="chip designed">Designed</span></div>
+    <p class="sec-lede">This pipeline produces a report for a person to act on; it does not take consequential action on its own. The approval pattern below is the production design, stated honestly as design rather than shipped code.</p>
+    <ul class="clean">
+      <li><b>The report is the checkpoint.</b> The natural human gate is review of the generated report, where every claim already arrives with its source and a confidence bound for the reviewer to weigh.</li>
+      <li><b>Gate consequential actions.</b> Any move from "report" to "action" (sending, filing, deciding) would sit behind an explicit human approval step, with the full provenance and confidence surfaced to the approver.</li>
+      <li><b>Low-confidence and third-party claims escalate.</b> Items below a confidence threshold, or allegations involving named third parties, would route to mandatory review rather than auto-proceeding.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="security">
+  <div class="wrap">
+    <div class="sec-head"><span class="sec-num">11</span><h2>Security &amp; governance</h2><span class="chip shipped">Shipped</span> <span class="chip designed">Designed</span></div>
+    <p class="sec-lede">Some of this is enforced today; some is the posture a regulated deployment would require. Both are stated plainly.</p>
+    <ul class="clean">
+      <li><b>Public sources only, secrets in env.</b> The pipeline ingests public data, holds no PII, and reads credentials from the environment, never the repo.</li>
+      <li><b>Named-entity claims are publishing-grade.</b> An AI-generated false claim about a real company is treated as a real exposure: one such claim was caught and scrubbed from git history before the repo went public, and every report now carries a prominent demonstration-and-not-advice disclaimer.</li>
+      <li><b>What regulated deployment needs <span class="chip designed" style="margin-left:4px">Designed</span></b>. Procurement and security review, compliance attestation, audit posture, and per-tenant isolation are the operational layer a real customer would expect before production, called out rather than glossed over.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="production">
+  <div class="wrap">
+    <div class="sec-head"><span class="sec-num">12</span><h2>What I would change for production</h2><span class="chip designed">Roadmap</span></div>
+    <p class="sec-lede">The honest gap between a strong demonstration and a system a regulated customer would deploy. Ordered roughly by how much each one matters.</p>
+    <ul class="clean">
+      <li><b>Calibrate confidence, do not just bound it.</b> Measure how often HIGH claims are actually right and tune the mapping, turning a defensible bound into a calibrated probability.</li>
+      <li><b>Finish the loud-failure pass everywhere.</b> The Phase-1 timeout and silent-null work is done; generalize the bounded-output discipline to every agent so no large entity can produce a sprawling or truncated section.</li>
+      <li><b>Human-in-the-loop approval gates.</b> Build the approval checkpoints described above for any action with consequences.</li>
+      <li><b>Integrate ACL-safe retrieval.</b> Bring the companion platform's governed retrieval into the pipeline so it can run against private, permissioned corpora, not just public sources.</li>
+      <li><b>Expand the eval harness.</b> More ground-truth domains beyond financials, plus adversarial and red-team cases for the claims most likely to be wrong.</li>
+      <li><b>Cost and deploy controls.</b> Per-run and per-tenant budgets, response caching, rate limits, and quotas, with the cost accounting already in place as the foundation.</li>
+    </ul>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="flinks">
+      <a href="https://github.com/rbsundaramoorthy/agentic-due-diligence">GitHub repository &#8599;</a>
+      <a href="sample-report-apple.md">Sample report &#8599;</a>
+      <a href="https://www.linkedin.com/in/rbsundaramoorthy">LinkedIn &#8599;</a>
+    </div>
+    <p>Built solo, on public data, as a demonstration. Not professional due diligence, not investment advice, and not affiliated with or endorsed by any company named in a report. Reports are pinned to a specific run and commit so they match what is described here.</p>
+  </div>
+</footer>
+
+<script>
+  const links = Array.from(document.querySelectorAll('#navlinks a'));
+  const map = new Map(links.map(a => [a.getAttribute('href').slice(1), a]));
+  const obs = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        links.forEach(l => l.classList.remove('active'));
+        const a = map.get(e.target.id);
+        if (a) a.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-45% 0px -50% 0px' });
+  document.querySelectorAll('main section[id]').forEach(s => obs.observe(s));
+</script>
+</body>
+</html>

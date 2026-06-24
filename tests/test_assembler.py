@@ -4,7 +4,7 @@ import time
 
 import pytest
 
-from src.schemas.models import Claim, ConfidenceLevel, ReportDocument, SourceTier
+from src.schemas.models import Claim, ConfidenceLevel, GapRecord, ReportDocument, SourceTier
 from src.synthesis.assembler import (
     _infer_tier,
     _is_assembled_empty,
@@ -281,6 +281,31 @@ def test_gap_records_identify_agent():
     doc = assemble_report(data, None, None, None, None, _trace_summary())
     research_gaps = [g for g in doc.gaps if g.agent == "research"]
     assert any(g.field == "employee_count" for g in research_gaps)
+
+
+def test_timed_out_section_is_silent_without_extra_gaps():
+    """Documents the gap this fix closes: a section that arrives as None (agent
+    timed out / failed) produces NO field-level gap on its own — it would be a
+    silent null section without the orchestration's extra_gaps."""
+    # risk_data=None simulates a timed-out risk agent.
+    doc = assemble_report(_research_data(), None, None, None, None, _trace_summary())
+    assert doc.risk is None
+    assert not any(g.agent == "risk" for g in doc.gaps)  # silent on its own
+
+
+def test_extra_gaps_make_a_missing_section_loud():
+    """extra_gaps (orchestration-level) surface a timed-out/failed section LOUDLY
+    in doc.gaps, so a null section is never silent."""
+    loud = GapRecord(field="risk_section", agent="risk",
+                     reason="partial: Timed out after 300s")
+    doc = assemble_report(_research_data(), None, None, None, None, _trace_summary(),
+                          extra_gaps=[loud])
+    risk_gaps = [g for g in doc.gaps if g.agent == "risk"]
+    assert len(risk_gaps) == 1
+    assert "timed out" in risk_gaps[0].reason.lower()
+    assert risk_gaps[0].field == "risk_section"
+    # Field-level gaps from present sections are still collected alongside.
+    assert doc.risk is None
 
 
 # ── assemble_report — claim fields ───────────────────────────────────────────
@@ -1342,27 +1367,86 @@ def test_compute_section_confidences_excludes_none_sections():
     assert "social_media" not in sc
 
 
-def test_compute_overall_confidence_weighted():
-    """Overall confidence is Financial×0.4 + Risk×0.4 + SocialMedia×0.2, renormalized."""
-    # Only financial present (weight renormalized to 1.0)
-    sc = {"financial": 80.0}
-    oc = compute_overall_confidence(sc)
-    assert oc == pytest.approx(80.0, abs=0.01)
+def test_compute_overall_confidence_all_present_unchanged():
+    """All three weighted sections present: un-renormalized sum == old value
+    (weights sum to 1.0, so healthy runs are unaffected)."""
+    sc = {"financial": 80.0, "risk": 90.0, "social_media": 72.0}
+    # 0.40*80 + 0.40*90 + 0.20*72 = 32 + 36 + 14.4 = 82.4
+    assert compute_overall_confidence(sc) == pytest.approx(82.4, abs=0.01)
 
 
-def test_compute_overall_confidence_two_sections():
-    """Two sections present: weights are renormalized over the present ones."""
-    # financial=80 (w=0.4) + risk=60 (w=0.4) → weighted_sum=56, total_w=0.8 → 70.0
-    sc = {"financial": 80.0, "risk": 60.0}
-    oc = compute_overall_confidence(sc)
-    assert oc == pytest.approx(70.0, abs=0.01)
+def test_compute_overall_confidence_one_weighted_missing_contributes_zero():
+    """PROPERTY (fail-before / pass-after): a missing weighted section contributes
+    ZERO at full weight — NOT renormalized away.
+
+    Arbitrary fixture values. Old behavior renormalized {financial:80, risk:60}
+    over the present 0.8 weight -> 70.0. New behavior: social_media missing ->
+    0.40*80 + 0.40*60 + 0.20*0 = 56.0, strictly lower than 70.0.
+    """
+    sc = {"financial": 80.0, "risk": 60.0}  # social_media missing
+    new = compute_overall_confidence(sc)
+    assert new == pytest.approx(56.0, abs=0.01)
+    old_renormalized = (0.40 * 80.0 + 0.40 * 60.0) / (0.40 + 0.40)  # = 70.0
+    assert new < old_renormalized
+
+
+def test_compute_overall_confidence_two_weighted_missing():
+    """Two weighted sections missing -> only the remaining one contributes."""
+    sc = {"financial": 80.0}  # risk + social_media missing
+    # 0.40*80 + 0 + 0 = 32.0  (NOT the old renormalized 80.0)
+    assert compute_overall_confidence(sc) == pytest.approx(32.0, abs=0.01)
 
 
 def test_compute_overall_confidence_returns_none_if_no_weighted_sections():
-    """Returns None when none of the three weighted sections are present."""
+    """All-absent branch returns None (NOT 0.0) — overall is UNDEFINED, a distinct
+    state from a computed verdict of zero. Non-weighted Research/Synthesis presence
+    does not produce a score."""
     sc = {"research": 90.0, "synthesis": 80.0}
-    oc = compute_overall_confidence(sc)
-    assert oc is None
+    result = compute_overall_confidence(sc)
+    assert result is None        # None, never the number 0
+    assert result != 0.0
+    # Truly empty input → also None.
+    assert compute_overall_confidence({}) is None
+
+
+def test_compute_overall_confidence_docstring_states_none_vs_zero_rationale():
+    """The None-vs-0.0 decision is documented, not incidental."""
+    doc = compute_overall_confidence.__doc__ or ""
+    assert "no basis to score" in doc
+    assert "0.0" in doc and "UNDEFINED" in doc
+
+
+def test_compute_overall_confidence_nonweighted_missing_has_no_effect():
+    """A missing Research or Synthesis (non-weighted) section does NOT change
+    overall — the change is scoped to the weighted blend only."""
+    base = {"financial": 80.0, "risk": 90.0, "social_media": 72.0}
+    with_extras = {**base, "research": 91.0, "synthesis": 85.0}
+    assert compute_overall_confidence(base) == compute_overall_confidence(with_extras)
+    # And dropping the non-weighted ones changes nothing.
+    assert compute_overall_confidence(with_extras) == pytest.approx(82.4, abs=0.01)
+
+
+def test_missing_weighted_section_is_loud_and_drags_overall():
+    """CONSISTENCY (end-to-end): a timed-out weighted section (risk) simultaneously
+    appears as a gap AND drags overall down — its 0.40 weight contributes 0, with
+    no renormalization — so overall is no longer 'high' while the section is absent."""
+    loud = GapRecord(field="risk_section", agent="risk",
+                     reason="partial: Timed out after 300s")
+    # Risk timed out (data None); financial present; social absent too.
+    doc = assemble_report(_research_data(), _financial_data(), None, None, None,
+                          _trace_summary(), extra_gaps=[loud])
+    sc = doc.run_metadata.section_confidences
+    oc = doc.run_metadata.overall_confidence
+
+    # (1) loud gap for the missing weighted section
+    assert any(g.agent == "risk" and "timed out" in g.reason.lower() for g in doc.gaps)
+    # (2) section absent from the doc and from section_confidences
+    assert doc.risk is None and "risk" not in sc
+    # (3) overall = 0.40*financial + 0.40*0 (risk) + 0.20*0 (social) — un-renormalized
+    fin = sc.get("financial", 0.0)
+    assert oc == pytest.approx(round(0.40 * fin, 2), abs=0.01)
+    # (4) not "high" while a weighted section is absent
+    assert oc < 75.0
 
 
 def test_assemble_report_populates_section_confidences():

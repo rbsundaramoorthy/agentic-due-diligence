@@ -891,20 +891,33 @@ def compute_section_confidences(doc: "ReportDocument") -> Dict[str, float]:
 
 
 def compute_overall_confidence(section_confidences: Dict[str, float]) -> Optional[float]:
-    """Compute the overall weighted confidence across Financial (40%), Risk (40%), Social Media (20%).
+    """Overall weighted confidence: Financial (40%) + Risk (40%) + Social Media (20%).
 
-    Returns None if none of the weighted sections are present. Result is in the
-    same percentage scale (0.0–100.0) as section_confidences.
+    The weights already sum to 1.0, so the blend is NOT renormalized. A weighted
+    section that is MISSING/failed — absent from section_confidences, the same
+    condition that produces its loud-partial gap and failed status — contributes
+    ZERO at its FULL weight. Losing a weighted section therefore depresses overall
+    accordingly, consistent with the surfaced gap (e.g. Risk missing, Financial 80,
+    Social 70 → 0.40*80 + 0.40*0 + 0.20*70 = 46, not the renormalized ~76).
+
+    Returns None — DELIBERATELY, not incidentally — when none of the three
+    weighted sections is scorable. Overall confidence is then UNDEFINED: there is
+    no basis to score. This is distinct from 0.0, which would assert a *computed*
+    verdict of zero confidence. None = "no basis to score"; 0.0 = "scored, and it
+    is zero." The two must never be conflated, so callers must render None as an
+    explicit "not computable" state, never as 0% or a blank/omitted value.
+
+    Result is on the same 0.0–100.0 percentage scale as section_confidences.
     """
-    weighted_sum, total_weight = 0.0, 0.0
-    for section_name, weight in _SECTION_WEIGHTS.items():
-        pct = section_confidences.get(section_name)
-        if pct is not None:
-            weighted_sum += pct * weight
-            total_weight += weight
-    if total_weight == 0.0:
+    # All-absent branch: no weighted section is scorable → overall is UNDEFINED.
+    # Return None (not 0.0) so the distinction above is preserved end to end.
+    if not any(section_confidences.get(name) is not None for name in _SECTION_WEIGHTS):
         return None
-    return round(weighted_sum / total_weight, 2)
+    overall = sum(
+        weight * section_confidences.get(name, 0.0)
+        for name, weight in _SECTION_WEIGHTS.items()
+    )
+    return round(overall, 2)
 
 
 # ── Tier coverage ─────────────────────────────────────────────────────────────
@@ -1335,6 +1348,7 @@ def assemble_report(
     synthesis_data: Optional[dict],
     trace_summary: dict,
     edgar_data: Optional[dict] = None,
+    extra_gaps: Optional[List[GapRecord]] = None,
 ) -> ReportDocument:
     """Assemble all agent outputs into a canonical, validated ReportDocument.
 
@@ -1342,6 +1356,10 @@ def assemble_report(
     tier-annotated canonical report. Gaps (confidence=unknown fields) are
     collected from all four specialist agents and surfaced in doc.gaps.
     EDGAR data (when present) is merged into financial and risk sections.
+
+    extra_gaps: orchestration-level gaps (e.g. an agent that timed out or failed,
+    whose section arrives as None) that field-level gap collection cannot see —
+    surfaced so a missing section is LOUD rather than a silent null.
     """
     company_name = (
         (research_data or {}).get("company_name")
@@ -1350,7 +1368,7 @@ def assemble_report(
         or "Unknown Company"
     )
 
-    gaps: List[GapRecord] = []
+    gaps: List[GapRecord] = list(extra_gaps) if extra_gaps else []
     for data, agent_name in (
         (research_data,    "research"),
         (financial_data,   "financial"),
